@@ -36,14 +36,23 @@ function tone({ freq = 660, dur = 0.09, type = 'sine', gain = 0.15, slide = 0 })
   osc.stop(c.currentTime + dur + 0.02);
 }
 
+/**
+ * Soft, round sounds to match the look — sine and triangle waves at low gain,
+ * nothing buzzy. A rep pops rather than beeps, and the combo climbs in pitch so
+ * a long streak sounds like it is going somewhere.
+ */
 export const sfx = {
-  rep(n = 1) { tone({ freq: 520 + Math.min(n, 12) * 18, dur: 0.08, type: 'triangle', gain: 0.16 }); },
-  milestone() { [660, 880, 1100].forEach((f, i) => setTimeout(() => tone({ freq: f, dur: 0.1, type: 'square', gain: 0.12 }), i * 70)); },
-  complete() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone({ freq: f, dur: 0.16, type: 'triangle', gain: 0.14 }), i * 110)); },
-  countdown() { tone({ freq: 440, dur: 0.1, type: 'sine', gain: 0.12 }); },
-  go() { tone({ freq: 880, dur: 0.22, type: 'triangle', gain: 0.16, slide: 220 }); },
-  fail() { tone({ freq: 220, dur: 0.2, type: 'sawtooth', gain: 0.1, slide: -80 }); },
-  levelUp() { [392, 523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone({ freq: f, dur: 0.18, type: 'square', gain: 0.1 }), i * 90)); },
+  rep(n = 1) {
+    const step = Math.min(n, 12);
+    tone({ freq: 560 + step * 26, dur: 0.11, type: 'sine', gain: 0.13 });
+    tone({ freq: 1120 + step * 52, dur: 0.07, type: 'sine', gain: 0.05 });
+  },
+  milestone() { [784, 1046].forEach((f, i) => setTimeout(() => tone({ freq: f, dur: 0.14, type: 'sine', gain: 0.1 }), i * 90)); },
+  complete() { [523, 659, 880].forEach((f, i) => setTimeout(() => tone({ freq: f, dur: 0.2, type: 'sine', gain: 0.11 }), i * 120)); },
+  countdown() { tone({ freq: 480, dur: 0.12, type: 'sine', gain: 0.09 }); },
+  go() { tone({ freq: 720, dur: 0.26, type: 'triangle', gain: 0.12, slide: 260 }); },
+  fail() { tone({ freq: 320, dur: 0.22, type: 'sine', gain: 0.07, slide: -90 }); },
+  levelUp() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone({ freq: f, dur: 0.22, type: 'sine', gain: 0.1 }), i * 110)); },
 };
 
 let voiceOn = true;

@@ -1,13 +1,13 @@
 {
-  "name": "Sloth Mode — lazy workout game",
-  "short_name": "Sloth Mode",
-  "description": "Pick a body part, prop your phone up, and let the camera count your reps.",
+  "name": "Aura — the lying-down game",
+  "short_name": "Aura",
+  "description": "A game you play lying down. Pop glowing orbs with your feet and watch your own aura light up.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0B0A14",
-  "theme_color": "#0B0A14",
+  "background_color": "#FDF7F9",
+  "theme_color": "#FDF7F9",
   "categories": ["health", "fitness", "games"],
   "icons": [
     { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

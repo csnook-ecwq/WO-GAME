@@ -1,9 +1,9 @@
 /**
- * Service worker: cache the app shell so Sloth Mode opens instantly and works
+ * Service worker: cache the app shell so Aura opens instantly and works
  * offline. The pose model itself is fetched from a CDN on first use and then
  * left to the browser's own HTTP cache.
  */
-const CACHE = 'slothmode-v1';
+const CACHE = 'aura-v2';
 const SHELL = [
   './',
   './index.html',
@@ -11,7 +11,9 @@ const SHELL = [
   './manifest.webmanifest',
   './assets/icon.svg',
   './js/app.js',
-  './js/session.js',
+  './js/game.js',
+  './js/ghost.js',
+  './js/levels.js',
   './js/store.js',
   './js/pose.js',
   './js/fx.js',

@@ -3,14 +3,16 @@ import assert from 'node:assert/strict';
 
 import {
   LM, SIGNALS, buildFrame, angleAt, distanceToLine, visibilityOf,
-  createRepCounter, createExerciseTracker,
+  createRepCounter, createExerciseTracker, TIER, tierFor, tierSatisfies,
 } from '../js/detectors.js';
 import {
-  EXERCISES, ROUTINES, EXERCISE_BY_ID, POSITIONS,
+  EXERCISES, ROUTINES, EXERCISE_BY_ID, POSITIONS, VIEWS,
   routineReps, routineXp, routinePositions, repPoints, POINTS_PER_XP,
 } from '../js/exercises.js';
-import { levelFor, streak, LEVELS } from '../js/store.js';
+import { rankFor, streak, LEVEL_TITLES } from '../js/store.js';
 import { mapFromRotated, ROTATIONS } from '../js/pose.js';
+import { LEVELS, WORLDS, levelView, levelReps, isUnlocked, nextLevel } from '../js/levels.js';
+import { comboMultiplier, starsFor, isHit, targetFor } from '../js/game.js';
 
 /* ------------------------------------------------------------ fake bodies */
 
@@ -361,13 +363,15 @@ test('landmarks map back from every rotation the prober tries', () => {
 
 /* -------------------------------------------------------------- progression */
 
-test('levels are ordered and map XP correctly', () => {
-  for (let i = 1; i < LEVELS.length; i++) assert.ok(LEVELS[i].xp > LEVELS[i - 1].xp);
-  assert.equal(levelFor(0).level, 1);
-  assert.equal(levelFor(LEVELS[2].xp).title, LEVELS[2].title);
-  assert.equal(levelFor(LEVELS[1].xp - 1).level, 1);
-  assert.equal(levelFor(999999).progress, 1);
-  const mid = levelFor(Math.round((LEVELS[1].xp + LEVELS[2].xp) / 2));
+test('ranks are ordered and map stars correctly', () => {
+  for (let i = 1; i < LEVEL_TITLES.length; i++) {
+    assert.ok(LEVEL_TITLES[i].stars > LEVEL_TITLES[i - 1].stars);
+  }
+  assert.equal(rankFor(0).index, 0);
+  assert.equal(rankFor(LEVEL_TITLES[2].stars).title, LEVEL_TITLES[2].title);
+  assert.equal(rankFor(LEVEL_TITLES[1].stars - 1).index, 0);
+  assert.equal(rankFor(9999).progress, 1);
+  const mid = rankFor(Math.round((LEVEL_TITLES[1].stars + LEVEL_TITLES[2].stars) / 2));
   assert.ok(mid.progress > 0.3 && mid.progress < 0.7);
 });
 
@@ -386,4 +390,235 @@ test('visibilityOf averages the landmarks it is given', () => {
   assert.ok(visibilityOf(lms, [LM.L_ANKLE, LM.R_ANKLE]) > 0.9);
   assert.equal(visibilityOf(lms, []), 0);
   assert.equal(visibilityOf(null, [1]), 0);
+});
+
+/* ------------------------------------------------------- tiered body frames */
+
+/** Hides landmarks from the frame builder, the way a phone held low would. */
+function hide(lms, indices) {
+  return lms.map((p, i) => (indices.includes(i) ? { ...p, visibility: 0.02 } : p));
+}
+
+const SHOULDERS = [LM.L_SHOULDER, LM.R_SHOULDER];
+
+test('a hips-to-feet view still produces a usable body frame', () => {
+  const full = buildFrame(body());
+  assert.equal(full.tier, TIER.TORSO);
+
+  const legsOnly = buildFrame(hide(body(), SHOULDERS));
+  assert.ok(legsOnly, 'a body with no shoulders in shot must still give a frame');
+  assert.equal(legsOnly.tier, TIER.PELVIS);
+  // Head-ward is inferred from the knees sitting foot-ward of the hips, so it
+  // should agree with the direction the shoulders would have given.
+  const agreement = legsOnly.u.x * full.u.x + legsOnly.u.y * full.u.y;
+  assert.ok(agreement > 0.95, `pelvis frame points the wrong way (dot ${agreement})`);
+});
+
+test('no hips means no frame', () => {
+  assert.equal(buildFrame(hide(body(), [LM.L_HIP, LM.R_HIP])), null);
+  // Hips but nothing to orient against either.
+  assert.equal(buildFrame(hide(body(), [...SHOULDERS, LM.L_KNEE, LM.R_KNEE])), null);
+});
+
+test('locked head-ward survives knees coming above the hips', () => {
+  // Legs extended: the frame can work out head-ward on its own.
+  const rest = buildFrame(hide(body(), SHOULDERS));
+  const locked = { x: rest.u.x, y: rest.u.y };
+
+  // Knees pulled past the hip line — now the "knees are foot-ward" assumption
+  // is false, and an unlocked frame flips its axis by 180°.
+  const tucked = hide(body({ [LM.L_KNEE]: [0.45, 0.38], [LM.R_KNEE]: [0.55, 0.38] }), SHOULDERS);
+  const unlocked = buildFrame(tucked);
+  const held = buildFrame(tucked, { headWard: locked });
+
+  assert.ok(unlocked.u.x * locked.x + unlocked.u.y * locked.y < 0, 'expected the naive frame to flip');
+  assert.ok(held.u.x * locked.x + held.u.y * locked.y > 0.99, 'locked frame must not flip');
+});
+
+test('hipTuck reads the same in both tiers', () => {
+  // Head-ward is locked from the resting pose, exactly as the tracker does
+  // during the countdown — without it a deep tuck flips the pelvis frame.
+  const locked = buildFrame(hide(body(), SHOULDERS)).headWard;
+
+  for (const pose of [
+    body(),
+    body({ [LM.L_KNEE]: [0.45, 0.60], [LM.R_KNEE]: [0.55, 0.60] }),
+    body({ [LM.L_KNEE]: [0.45, 0.50], [LM.R_KNEE]: [0.55, 0.50] }),
+    body({ [LM.L_KNEE]: [0.45, 0.42], [LM.R_KNEE]: [0.55, 0.42] }),
+  ]) {
+    const withTorso = SIGNALS.hipTuck(buildFrame(pose));
+    const withoutTorso = SIGNALS.hipTuck(buildFrame(hide(pose, SHOULDERS), { headWard: locked }));
+    assert.ok(
+      Math.abs(withTorso - withoutTorso) < 1e-6,
+      `hipTuck disagrees across tiers: ${withTorso} vs ${withoutTorso}`
+    );
+  }
+});
+
+test('a full knee tuck counts in a legs-only view', () => {
+  // The end-to-end case the pelvis tier exists for: phone held above the hips,
+  // shoulders out of shot, knees driving past the hip line every rep.
+  const tracker = createExerciseTracker(EXERCISE_BY_ID['knee-tucks']);
+  let t = 0;
+  const legsOnly = (lms) => hide(lms, SHOULDERS);
+  for (let i = 0; i < 20; i++) { t += 33; tracker.update(legsOnly(body()), t, true); }
+
+  const REPS = 8;
+  for (let r = 0; r < REPS; r++) {
+    for (let f = 0; f < 20; f++) {
+      const pull = Math.sin((f / 20) * Math.PI) * 0.30;   // knees travel up toward the chest
+      const lm = body({
+        [LM.L_KNEE]: [0.45, 0.72 - pull], [LM.R_KNEE]: [0.55, 0.72 - pull],
+        [LM.L_ANKLE]: [0.45, 0.90 - pull * 0.6], [LM.R_ANKLE]: [0.55, 0.90 - pull * 0.6],
+      });
+      t += 33;
+      tracker.update(legsOnly(lm), t);
+    }
+  }
+  const counted = tracker.counter.reps;
+  assert.ok(counted >= REPS - 1 && counted <= REPS + 1, `counted ${counted} of ${REPS} knee tucks`);
+});
+
+test('signals are tagged with the frame they need', () => {
+  assert.equal(tierFor('crunch'), TIER.TORSO);
+  assert.equal(tierFor('bridge'), TIER.TORSO);
+  assert.equal(tierFor('elbowBend'), TIER.TORSO);
+  assert.equal(tierFor('kneeAlternate'), TIER.PELVIS);
+  assert.equal(tierFor('hipTuck'), TIER.PELVIS);
+  assert.ok(tierSatisfies(TIER.TORSO, TIER.PELVIS), 'a full view covers a leg-only signal');
+  assert.ok(!tierSatisfies(TIER.PELVIS, TIER.TORSO), 'a leg-only view cannot serve a torso signal');
+});
+
+test('a torso-only move reports why it cannot count in a legs-only view', () => {
+  const tracker = createExerciseTracker(EXERCISE_BY_ID['glute-bridge']);
+  const out = tracker.update(hide(body(), SHOULDERS), 100);
+  assert.equal(out.tracking, false);
+  assert.equal(out.reason, 'tier');
+  assert.equal(out.requiredTier, TIER.TORSO);
+});
+
+test('place() is the exact inverse of along/across', () => {
+  const f = buildFrame(body());
+  for (const q of [f.p(LM.L_ANKLE), f.p(LM.R_KNEE), f.shoulderMid]) {
+    const back = f.place(f.along(q), f.across(q));
+    assert.ok(Math.abs(back.x - q.x) < 1e-9 && Math.abs(back.y - q.y) < 1e-9,
+      'body-frame coordinates must round-trip back to the same pixel');
+  }
+});
+
+test('legLift rises as one leg comes off the floor', () => {
+  const flat = SIGNALS.legLift(buildFrame(body()));
+  const lifted = SIGNALS.legLift(buildFrame(body({ [LM.L_ANKLE]: [0.30, 0.88] })));
+  assert.ok(lifted > flat + 0.2, `legLift did not respond: ${flat} → ${lifted}`);
+});
+
+test('moves that need your torso are only ever propped-phone moves', () => {
+  // The whole point of the hand-held view is that your shoulders are out of
+  // shot. A move whose signal needs them can never be counted there, so it must
+  // be tagged as a propped level or the level will look broken to the player.
+  for (const ex of EXERCISES) {
+    if (tierFor(ex.signal) === TIER.TORSO) {
+      assert.equal(ex.view, 'propped', `${ex.id} needs your torso but is a "${ex.view}" move`);
+    }
+  }
+});
+
+test('every move declares a camera setup, zones and a sane target', () => {
+  const JOINTS = new Set(['L_ANKLE', 'R_ANKLE', 'L_KNEE', 'R_KNEE', 'L_WRIST', 'R_WRIST']);
+  for (const ex of EXERCISES) {
+    assert.ok(VIEWS[ex.view], `${ex.id}: unknown view ${ex.view}`);
+    assert.ok(ex.zones?.length, `${ex.id}: no muscle zones tagged`);
+    if (!ex.target) continue;   // null target is allowed: it plays as a power ring
+    assert.ok(ex.target.joints?.length, `${ex.id}: target has no joints`);
+    for (const j of ex.target.joints) assert.ok(JOINTS.has(j), `${ex.id}: bad target joint ${j}`);
+    assert.ok(['mirror', 'alternate'].includes(ex.target.pairing), `${ex.id}: bad pairing`);
+    const travel = Math.hypot(ex.target.along || 0, ex.target.across || 0);
+    assert.ok(travel > 0.1 && travel < 1.5, `${ex.id}: target travel of ${travel} is implausible`);
+  }
+});
+
+/* ------------------------------------------------------------- the levels */
+
+test('every level keeps one camera setup from start to finish', () => {
+  // The camera is positioned once when a level begins. A level mixing views
+  // would ask you to get up and move the phone halfway through.
+  for (const level of LEVELS) {
+    const views = new Set(level.moves.map(([id]) => EXERCISE_BY_ID[id].view));
+    assert.equal(views.size, 1, `${level.id} mixes camera setups: ${[...views].join(', ')}`);
+    assert.equal(levelView(level), [...views][0]);
+  }
+});
+
+test('levels reference real moves and sit in real worlds', () => {
+  const worlds = new Set(WORLDS.map((w) => w.id));
+  for (const level of LEVELS) {
+    assert.ok(worlds.has(level.world), `${level.id}: unknown world ${level.world}`);
+    assert.ok(level.moves.length >= 2, `${level.id}: too short`);
+    for (const [id, reps] of level.moves) {
+      assert.ok(EXERCISE_BY_ID[id], `${level.id}: unknown move ${id}`);
+      assert.ok(reps > 0 && reps <= 60, `${level.id}: odd rep count for ${id}`);
+    }
+    assert.ok(levelReps(level) > 0);
+  }
+  assert.ok(WORLDS.every((w) => LEVELS.some((l) => l.world === w.id)), 'every world needs levels');
+});
+
+test('levels unlock one at a time', () => {
+  assert.ok(isUnlocked('l1', {}), 'the first level is always open');
+  assert.ok(!isUnlocked('l2', {}), 'the second waits for a star on the first');
+  assert.ok(isUnlocked('l2', { l1: 1 }));
+  assert.ok(!isUnlocked('l3', { l1: 3 }), 'stars do not skip ahead');
+  assert.equal(nextLevel({}).id, 'l1');
+  assert.equal(nextLevel({ l1: 3 }).id, 'l2', 'a cleared level points at the next one');
+  assert.equal(nextLevel({ l1: 1 }).id, 'l1', 'an unfinished level stays the suggestion');
+});
+
+/* --------------------------------------------------------- game mechanics */
+
+test('combo multiplier steps up and stars follow the hit rate', () => {
+  assert.equal(comboMultiplier(0), 1);
+  assert.equal(comboMultiplier(4), 1);
+  assert.equal(comboMultiplier(5), 2);
+  assert.equal(comboMultiplier(10), 3);
+  assert.equal(comboMultiplier(50), 4);
+
+  assert.equal(starsFor(10, 10), 3);
+  assert.equal(starsFor(9, 10), 3);
+  assert.equal(starsFor(7, 10), 2);
+  assert.equal(starsFor(3, 10), 1);
+  assert.equal(starsFor(0, 0), 1, 'a level with no orbs still gives a star for finishing');
+});
+
+test('orbs sit where the joint has to travel, mirrored per side', () => {
+  const spec = { joints: ['L_ANKLE', 'R_ANKLE'], pairing: 'mirror', along: 0, across: 0.45 };
+  const restL = { along: -1.6, across: -0.12 };
+  const restR = { along: -1.6, across: 0.12 };
+  const left = targetFor(spec, restL, 'L_ANKLE');
+  const right = targetFor(spec, restR, 'R_ANKLE');
+  // "Outward" has to mean outward on both sides, so the offsets are mirrored.
+  assert.ok(left.across > restL.across, 'left orb should sit further left');
+  assert.ok(right.across < restR.across, 'right orb should sit further right');
+  assert.equal(left.along, restL.along);
+
+  // Travel along the body is not mirrored — both knees come up the same way.
+  const tuck = { joints: ['L_KNEE', 'R_KNEE'], pairing: 'mirror', along: 0.55, across: 0 };
+  assert.equal(targetFor(tuck, { along: -0.9, across: -0.1 }, 'L_KNEE').along, -0.35);
+  assert.equal(targetFor(tuck, { along: -0.9, across: 0.1 }, 'R_KNEE').along, -0.35);
+});
+
+test('hit detection is a plain distance check in body units', () => {
+  const orb = { along: 1, across: 0, radius: 0.3 };
+  assert.ok(isHit(1, 0, orb), 'dead centre');
+  assert.ok(isHit(1.2, 0.1, orb), 'inside the radius');
+  assert.ok(!isHit(1.4, 0, orb), 'outside the radius');
+  assert.ok(isHit(1, 0.3, orb), 'exactly on the edge counts');
+});
+
+test('quick-play routines also keep one camera setup', () => {
+  // Same rule as levels: the camera is placed once, so a routine that jumps
+  // between hand-held and propped would strand you mid-workout.
+  for (const r of ROUTINES) {
+    const views = new Set(r.moves.map(([id]) => EXERCISE_BY_ID[id].view));
+    assert.equal(views.size, 1, `${r.id} mixes camera setups: ${[...views].join(', ')}`);
+  }
 });

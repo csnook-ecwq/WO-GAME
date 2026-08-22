@@ -1,188 +1,122 @@
-# 🦥 Sloth Mode — the lazy workout game
+# ✦ Aura
 
-A workout app for people who do not want to work out. **Every single exercise is
-done lying down** — on your back, on your side, or face down. Pick a body part,
-put your phone on the floor next to you, and the camera counts your reps while
-you lie there. Your score climbs with every rep.
+A game you play lying down.
 
-No account, no cloud, no equipment, and at no point are you asked to stand up.
+Hold your phone above your hips, look down your own legs, and glowing orbs appear
+where your knees and feet have to travel. Pop them by moving there. Your body
+shows up on screen as a glowing silhouette — your aura — that follows your exact
+outline, and a combo builds while you keep hitting orbs.
 
-<!-- screens: home (body map) → routine list → camera with AR overlay → summary -->
+Every exercise in the app is done on your back, your side, or your front. Nothing
+asks you to stand up.
 
-## What it does
+## How it works
 
-- **Pick a target area** — tap a body part on the figure (legs, glutes, core,
-  arms) or choose cardio / full body from the list. Every area has three
-  routines, all of them floor-only.
-- **Pick your effort level** — from "Horizontal" (ankle pumps and snow angels)
-  to "Actually Trying" (leg lowers, floor sprints). The lazy ones are real
-  workouts, just short.
-- **The camera counts for you** — a pose model tracks your knees, ankles, hips
-  and elbows and marks each rep automatically, with an AR overlay on your feet,
-  a live score that ticks up per rep, sound and spoken counting.
-- **It keeps score** — points during the workout, then XP, levels (Fully
-  Horizontal → Legend of the Rug), day streaks, badges, per-area mastery and a
-  14-day history.
+1. **Pick a level** from the map. Each level opens with a card showing where the
+   phone goes.
+2. **Get into position** — three setups, and a level never mixes them:
+   - **Phone in your hands** — on your back, phone above your hips, looking down
+     your legs. The default.
+   - **Face down, selfie camera** — on your front, phone in front of you, seeing
+     past you to your legs. Glutes.
+   - **Phone propped up** — leaned against something beside you. Arms, bridges,
+     crunches.
+3. **Lie still for the 3-2-1.** That is when it works out which way up you are
+   and learns your resting position.
+4. **Move.** Orbs pop, aura points climb, the combo multiplier grows. Miss too
+   long and the combo resets — nothing worse than that.
 
-24 exercises across six areas: knee tucks, flutter kicks, bicycles, dead bugs
-and leg lowers for core; floor bridges, clamshells and side leg lifts for
-glutes; ceiling presses, heel curls and ankle pumps for legs; floor presses,
-ceiling punches, snow angels and skull crushers for arms; plus lying jacks and
-floor knee drives when you want your heart rate up without standing.
+By default you only see your glowing self on a soft background, not your room.
+Tap ◉ to bring the camera picture back for a filter-over-the-room look.
 
-Everything runs in the browser. Add it to your home screen and it behaves like
-an app, offline included.
+## What's in it
 
-## Quick start
+- **16 levels** across four worlds, each earning up to three stars based on how
+  many orbs you actually hit.
+- **26 moves**, from ankle pumps to face-down donkey kicks.
+- **Quick play** — every routine in the library, no unlocking, whenever you want.
+- **Seven auras** to unlock with stars: Glow, Rainbow, Sparkle, Galaxy, Mermaid,
+  Ice, Ember. All drawn in code, nothing to download.
+- **Profiles** — separate stars, streaks and skins per person on the same phone.
+
+## Try it without a camera
+
+`?demo=1` runs the game against a synthetic body, so you can see how it plays on
+a laptop or before you get up. It never activates without the flag.
+
+## Running it
 
 ```bash
 npm start          # http://localhost:8080
-npm test           # unit tests for the rep-counting logic
+npm test           # unit tests for the tracking and game maths
 ```
 
-`localhost` counts as a secure context, so camera access works straight away on
-your laptop. **To use it on your phone you need HTTPS** — see below.
+Camera access needs `https://` (or localhost). The published build lives on
+GitHub Pages; pushing to `main` redeploys it.
 
-## Getting it on your phone
+## How the tracking works
 
-Camera access requires `https://` (or localhost). Pick whichever is easiest:
+There is no "AI trainer" guessing at video. It is geometry, and it is inspectable.
 
-| Option | How |
-| --- | --- |
-| **GitHub Pages** (easiest) | Push this repo, then Settings → Pages → Source: *GitHub Actions*. The included workflow publishes on every push to `main`. |
-| **Tunnel** | `npm start` then `ngrok http 8080` (or `cloudflared tunnel --url http://localhost:8080`) and open the https URL on your phone. |
-| **Any static host** | Netlify, Vercel, Cloudflare Pages — drop the folder in, there is no build step. |
-
-Then open it in Safari/Chrome on the phone and use *Add to Home Screen*.
-
-## How to actually use it
-
-1. Lie down. Put the phone on the floor **about 2 metres away, side-on**, so
-   your whole body from head to feet is in shot. Leaning it against a wall or a
-   shoe works well.
-2. Lie still during the `3 · 2 · 1` countdown. That is when the app figures out
-   which way up you are and measures your resting position.
-3. Move. Each rep pops, blips, adds points and counts itself. If tracking loses
-   you, the overlay turns red and tells you what to fix.
-4. Between moves you get a rest timer, which tells you if the next move needs
-   you to roll onto your side or your front.
-5. `+1` counts a rep by hand any time — if the light is bad, the camera is
-   blocked, or you just want to lie about it.
-
-## How the rep counting works
-
-There is no machine learning specific to this app and no "AI trainer" guessing
-at video. It is deliberately simple and inspectable:
-
-1. **Pose landmarks** — MediaPipe Pose Landmarker returns 33 body points per
-   frame, entirely on-device (`js/pose.js`).
-2. **Auto-rotation** — pose models are trained almost entirely on upright
-   people, and a body lying horizontally in frame detects far worse. So at the
-   start of each move the app briefly tries the frame at 0°, 90°, 270° and 180°,
-   scores each by how confidently it finds a head-up body, keeps the winner, and
-   maps the landmarks back for drawing. If you roll onto your side mid-routine
-   and tracking drops out, it re-runs that search automatically.
-3. **One signal per exercise** — each move reduces those points to a single
-   number meaning "how far into the rep are you" (`SIGNALS` in
-   `js/detectors.js`). Bicycles use which knee is drawn further up the body;
-   bridges use how far the hips sit off the shoulder-to-knee line; knee tucks
-   use the hip angle; floor presses use elbow angle.
-4. **Body-frame measurement** — no signal uses raw image axes. They are joint
-   angles, or projections onto your own spine axis and its perpendicular, all
-   divided by your body scale. That means the numbers are identical whether you
-   are lying head-left, head-right or diagonally across the frame, and whether
-   the phone is near or far. There is a unit test asserting exactly this for
-   every signal at five different body angles.
-5. **Calibration** — the countdown measures your resting value, so thresholds
-   are relative to *your* start position, not an assumed one.
-6. **A state machine counts reps** — `cycle` moves (bridges, knee tucks) count
-   one rep per out-and-back swing; `alternate` moves (bicycles, flutter kicks)
-   count each side as it crosses the middle. A minimum interval rejects
-   impossible rep rates, and a visibility gate refuses to count anything while
-   your legs are out of frame.
-7. **Adaptive thresholds** — after a couple of reps the counter re-tunes to the
-   range of motion you are actually producing. Half-range knee tucks still
-   count. That is the whole point of the app.
-
-The detectors are pure functions with no DOM or camera dependency, so they are
-unit tested against synthetic bodies: `npm test`.
+1. **Pose landmarks** — MediaPipe Pose Landmarker returns 33 body points plus a
+   **segmentation mask** per frame, entirely on-device. The mask is what makes
+   the ghost follow your real outline instead of being a stick figure.
+2. **Auto-rotation** — pose models are trained on upright people, and a body
+   lying sideways in frame detects badly. At the start of each move the app tries
+   the frame at 0°, 90°, 270° and 180°, keeps whichever finds a confident
+   head-up body, and maps the landmarks back. If tracking drops out mid-level it
+   searches again.
+3. **Two reference frames** — with the phone in your hands your shoulders are out
+   of shot, so the usual shoulder-to-hip body axis does not exist. The app falls
+   back to a **pelvis frame**: the hip line is rigid, so its perpendicular is a
+   stable body axis. Which way is head-ward is locked during the countdown, since
+   "knees are below the hips" stops being true the moment you tuck them.
+4. **Body-frame signals** — no signal uses screen axes. They are joint angles or
+   projections onto your own spine axis, divided by your body scale. The numbers
+   come out identical whether you are lying head-left, head-right or diagonally,
+   near or far. There is a test asserting exactly that for every signal at five
+   body angles.
+5. **Orbs live in body coordinates** too, which is why they stay glued to you
+   while the phone drifts in your hands. After each hit the orb's position is
+   nudged toward where your joint actually reached.
+6. **The rep counter is the safety net.** A hysteresis state machine counts reps
+   independently, adapting to whatever range of motion you are producing. If an
+   orb is missed but the rep was real, it still counts.
 
 ## Privacy
 
-Video never leaves your device — the pose model runs locally in WebAssembly and
-no frame is uploaded anywhere. Progress lives in `localStorage` in your browser.
-Clearing site data erases it; there is no backup and no account.
+Video never leaves your device — the model runs locally in WebAssembly. Progress
+lives in `localStorage` in this browser. There is no account and no server.
 
-The MediaPipe library and model weights are fetched from a CDN the first time
-you start a workout, then cached by the browser. To run fully offline, self-host
-them (see below).
-
-## Self-hosting the pose model (fully offline)
-
-```bash
-npm pack @mediapipe/tasks-vision@0.10.14      # or npm install it
-# copy vision_bundle.mjs and wasm/ into ./vendor
-curl -o vendor/pose_landmarker_lite.task \
-  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
-```
-
-Then open the app once with `?poseBase=/vendor`. The choice is remembered.
-Serve `.wasm` as `application/wasm` — the included dev server already does.
-
-## Adding your own exercise
-
-Add an entry to `EXERCISES` in `js/exercises.js` and reference it from a routine:
-
-```js
-{
-  id: 'heel-taps',
-  name: 'Heel Taps',
-  area: 'core', emoji: '👣', position: 'back',   // back | side | front only
-  laziness: 2,
-  cue: 'On your back, tap alternate heels out along the floor.',
-  framing: 'Phone on the floor about 2m away, pointed at your legs and feet.',
-  tips: ['Each tap counts as a rep'],
-  signal: 'ankleAlternate',                 // any key from SIGNALS
-  needs: [23, 24, 25, 26, 27, 28],          // landmarks that must be visible
-  detector: { mode: 'alternate', enter: 0.12, minIntervalMs: 260 },
-  xp: 1,
-}
-```
-
-If none of the existing signals fit, add one to `SIGNALS` in `js/detectors.js` —
-it maps a frame to a number where bigger means more effort. Build it from
-`f.along()`, `f.across()` and `angleAt()` rather than raw `x`/`y`, or it will
-break the moment someone lies down the other way round. `npm test` checks that
-every exercise is lying-down, wired to a real signal, and rotation-independent.
+The MediaPipe library and model are fetched from a CDN on first use, then cached.
+To run fully offline, self-host them and open the app once with `?poseBase=/vendor`
+(see `js/pose.js`).
 
 ## Project layout
 
 ```
 index.html            app shell
-styles.css            all styling (dark arcade theme, mobile first)
-js/detectors.js       pose signals + rep state machines (pure, tested)
-js/exercises.js       areas, lying-down moves and routines — the content layer
-js/pose.js            camera + MediaPipe wiring, rotation search, throttled loop
-js/session.js         the camera game screen: countdown, tracking, rest
-js/store.js           XP, levels, streaks, badges, history (localStorage)
-js/fx.js              blips, spoken counting, particles, confetti
+styles.css            the light glass design system
+js/detectors.js       body frames, signals, rep counters (pure, tested)
+js/ghost.js           segmentation-mask ghost + procedural skins
+js/game.js            orbs, hit detection, combo scoring, the play loop
+js/levels.js          worlds, levels, unlock rules
+js/exercises.js       the move library
+js/pose.js            camera + MediaPipe + rotation search
+js/store.js           profiles, stars, streaks, badges
 js/app.js             screens and routing
-sw.js                 offline app shell
+js/fx.js              sounds and particles
 tests/                unit tests (node --test)
 ```
 
 ## Known limits
 
-- Rep counting depends on the camera seeing you. Bad light, baggy clothes, a
-  cluttered background or legs out of frame all degrade it — hence the `+1`
-  button and the on-screen framing warnings.
-- Lying-down tracking is harder than standing tracking, even with the rotation
-  search: side-lying and face-down poses hide half your joints from the camera,
-  so clamshells and prone leg lifts are the least reliable moves in the app.
-  Point the phone at your legs for those.
-- Arm moves (floor presses, skull crushers) are counted from elbow angle, so the
-  camera needs a view of your arms rather than your feet.
-- On older phones the pose model can cost 100ms+ per frame. The detect loop
-  throttles itself so the interface stays responsive, at the cost of tracking
-  fast movements less precisely.
-- It cannot judge your form. It counts reps. Sloth Mode has no opinions.
+- **Hand-held tracking is the hard case.** Your shoulders are out of shot and the
+  phone moves. The pelvis frame and body-relative measurement are built for
+  exactly this, but bad light, blankets over your legs or hips out of frame will
+  still lose you. The `+1` button always counts a rep by hand.
+- **Face-down is the least reliable view** — your own torso hides part of your
+  legs from the lens.
+- Segmentation costs frames. The renderer measures itself and steps down to an
+  outline, then to a skeleton-built silhouette, rather than dropping frames.
+- It counts reps and pops orbs. It cannot judge your form.

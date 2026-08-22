@@ -1,27 +1,31 @@
 /**
- * app.js — screens, routing and the bits that glue the game together.
+ * app.js — screens, routing and the glue.
+ *
+ * Everything outside a level lives here: choosing who is playing, the level map,
+ * quick play, the level intro with its camera-setup card, results, and your own
+ * progress. The camera only turns on inside a level.
  */
 
+import { EXERCISE_BY_ID, VIEWS, ROUTINES, AREAS, AREA_BY_ID, ROUTINES_BY_AREA, routineReps } from './exercises.js';
 import {
-  AREAS, AREA_BY_ID, EXERCISE_BY_ID, ROUTINE_BY_ID, ROUTINES_BY_AREA,
-  POSITIONS, routineReps, routineXp, routinePositions, POINTS_PER_XP,
-} from './exercises.js';
+  LEVELS, WORLDS, LEVEL_BY_ID, levelsOfWorld, levelView, levelReps,
+  isUnlocked, nextLevel, levelIndex,
+} from './levels.js';
+import { SKINS, SKIN_IDS } from './ghost.js';
 import * as store from './store.js';
-import { BADGES } from './store.js';
-import { runSession } from './session.js';
-import { confetti, setVoice, unlockAudio, sfx } from './fx.js';
+import { playLevel } from './game.js';
+import { setVoice, unlockAudio, sfx } from './fx.js';
 import { isSecureForCamera } from './pose.js';
 
-const $ = (sel, root = document) => root.querySelector(sel);
 const el = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
 const screen = el('screen');
-let lastSummary = null;
+let lastResult = null;
 
-/* ------------------------------------------------------------------- toast */
+/* ------------------------------------------------------------------ toast */
 
 let toastTimer = 0;
 export function toast(msg, ms = 2200) {
@@ -32,255 +36,297 @@ export function toast(msg, ms = 2200) {
   toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
 
-/* ------------------------------------------------------------------ header */
+/* ------------------------------------------------------- who's playing gate */
 
-function paintHeader() {
-  const s = store.getState();
-  const lvl = store.levelFor(s.xp);
-  $('#levelChip').innerHTML = `Lv <b>${lvl.level}</b>`;
-  $('#streakChip').innerHTML = `🔥 <b>${store.streak()}</b>`;
+let pendingColor = null;
+
+function renderGate() {
+  const gate = el('gate');
+  const grid = el('playerGrid');
+  const profiles = store.profiles();
+
+  grid.innerHTML = profiles.map((p) => {
+    const s = store.stars(p.id);
+    return `<button class="player-tile" data-id="${p.id}">
+      <span class="player-face" style="background:${p.color}">${esc(p.name.slice(0, 1).toUpperCase())}</span>
+      <b>${esc(p.name)}</b>
+      <small>${s ? `${s} ★` : 'new'}</small>
+    </button>`;
+  }).join('') + `<button class="player-tile add" data-add="1">
+      <span class="player-face">＋</span><b>Add someone</b><small>&nbsp;</small>
+    </button>`;
+
+  grid.querySelectorAll('[data-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      store.setActive(btn.dataset.id);
+      unlockAudio();
+      enterApp();
+    });
+  });
+  grid.querySelector('[data-add]').addEventListener('click', () => showNewPlayer(true));
+
+  gate.hidden = false;
+  el('app').hidden = true;
+  if (!profiles.length) showNewPlayer(true);
 }
 
-/* --------------------------------------------------------------- body map */
-
-const MAP_REGIONS = {
-  arms: `
-    <g class="region" data-area="arms" style="--c:#6BE7FF" tabindex="0" role="button" aria-label="Arms and chest">
-      <rect x="71" y="50" width="58" height="44" rx="16"/>
-      <rect x="50" y="54" width="17" height="78" rx="8.5"/>
-      <rect x="133" y="54" width="17" height="78" rx="8.5"/>
-    </g>`,
-  core: `
-    <g class="region" data-area="core" style="--c:#FFD166" tabindex="0" role="button" aria-label="Core">
-      <rect x="75" y="96" width="50" height="44" rx="13"/>
-    </g>`,
-  glutes: `
-    <g class="region" data-area="glutes" style="--c:#FF7BD5" tabindex="0" role="button" aria-label="Glutes and hips">
-      <rect x="71" y="142" width="58" height="34" rx="16"/>
-    </g>`,
-  legs: `
-    <g class="region" data-area="legs" style="--c:#7CFF6B" tabindex="0" role="button" aria-label="Legs and calves">
-      <rect x="75" y="178" width="21" height="56" rx="10"/>
-      <rect x="104" y="178" width="21" height="56" rx="10"/>
-      <rect x="77" y="236" width="17" height="54" rx="8"/>
-      <rect x="106" y="236" width="17" height="54" rx="8"/>
-      <rect x="72" y="292" width="24" height="12" rx="6"/>
-      <rect x="104" y="292" width="24" height="12" rx="6"/>
-    </g>`,
-};
-
-function bodyMapSvg() {
-  return `
-  <svg class="bodymap" viewBox="0 0 200 320" role="group" aria-label="Body map">
-    <circle cx="100" cy="28" r="17" fill="#ffffff10" stroke="#ffffff22" stroke-width="1.5"/>
-    <path class="figure-line" d="M100 45 v6"/>
-    ${MAP_REGIONS.arms}
-    ${MAP_REGIONS.core}
-    ${MAP_REGIONS.glutes}
-    ${MAP_REGIONS.legs}
-  </svg>`;
+function showNewPlayer(show) {
+  const form = el('newPlayer');
+  form.hidden = !show;
+  if (!show) return;
+  const used = new Set(store.profiles().map((p) => p.color));
+  pendingColor = store.PLAYER_COLORS.find((c) => !used.has(c)) || store.PLAYER_COLORS[0];
+  el('newColors').innerHTML = store.PLAYER_COLORS.map((c) => `
+    <button type="button" class="swatch" data-color="${c}" style="background:${c}"
+            aria-pressed="${c === pendingColor}" aria-label="Colour ${c}"></button>`).join('');
+  el('newColors').querySelectorAll('.swatch').forEach((sw) => {
+    sw.addEventListener('click', () => {
+      pendingColor = sw.dataset.color;
+      el('newColors').querySelectorAll('.swatch').forEach((o) => o.setAttribute('aria-pressed', String(o === sw)));
+    });
+  });
+  el('newName').value = '';
+  setTimeout(() => el('newName').focus(), 60);
 }
 
-/* ------------------------------------------------------------ suggestions */
-
-/** Nudge toward the least-trained area, but keep it stable within a day. */
-function suggestedRoutine() {
-  const s = store.getState();
-  const ranked = [...AREAS].sort(
-    (a, b) => (s.areaReps[a.id] || 0) - (s.areaReps[b.id] || 0)
-  );
-  const area = ranked[0].id;
-  const options = ROUTINES_BY_AREA(area);
-  if (!options.length) return ROUTINE_BY_ID['full-standard'];
-  const dayIndex = Math.floor(Date.now() / 86400000);
-  return options[dayIndex % options.length];
+function wireGate() {
+  el('newCancel').addEventListener('click', () => {
+    if (store.profiles().length) showNewPlayer(false);
+  });
+  el('newPlayer').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = el('newName').value.trim();
+    if (!name) return;
+    store.addProfile({ name, color: pendingColor, kid: el('newKid').checked });
+    showNewPlayer(false);
+    unlockAudio();
+    enterApp();
+  });
+  el('whoBtn').addEventListener('click', () => {
+    renderGate();
+  });
 }
 
-/* ------------------------------------------------------------ home screen */
-
-function positionTags(routine) {
-  return routinePositions(routine)
-    .map((pos) => `<span class="tag tag-pos">${POSITIONS[pos].emoji} ${esc(POSITIONS[pos].label)}</span>`)
-    .join('');
+function enterApp() {
+  el('gate').hidden = true;
+  el('app').hidden = false;
+  paintWho();
+  go('#/map');
 }
 
-function laznessDots(n) {
-  return `<span class="dots">${[1, 2, 3, 4, 5]
-    .map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`)
-    .join('')}</span>`;
+function paintWho() {
+  const p = store.activeProfile();
+  if (!p) return;
+  el('whoName').textContent = p.name;
+  el('whoDot').style.background = p.color;
 }
 
-function renderHome() {
-  const s = store.getState();
-  const lvl = store.levelFor(s.xp);
+/* -------------------------------------------------------------- level map */
+
+const starRow = (n) => `<span class="node-stars">${
+  [1, 2, 3].map((i) => `<span class="${i <= n ? '' : 'off'}">★</span>`).join('')
+}</span>`;
+
+function renderMap() {
+  const byLevel = store.starsByLevel();
+  const suggestion = nextLevel(byLevel);
+  const rank = store.rankFor(store.stars());
   const today = store.todayStats();
-  const pick = suggestedRoutine();
-  const pickArea = AREA_BY_ID[pick.area];
+  const p = store.activeProfile();
 
   screen.innerHTML = `
-    ${isSecureForCamera() ? '' : `<div class="notice">Camera tracking needs HTTPS. Open this page over https:// (or localhost) or rep counting falls back to the manual +1 button.</div>`}
+    ${isSecureForCamera() ? '' : `<div class="notice">Camera tracking needs https:// — open the published link rather than a local file, or the orbs cannot see you.</div>`}
 
-    <div class="card hero-card">
+    <div class="card glass">
       <div class="hero">
-        <div class="hero-ring" style="--p:${Math.round(lvl.progress * 100)}"><b>${lvl.emoji}</b></div>
-        <div class="hero-text">
-          <div class="hero-title">${esc(lvl.title)}</div>
-          <div class="hero-sub">Level ${lvl.level} · ${s.xp.toLocaleString()} XP${lvl.next ? ` · ${lvl.toNext} to ${esc(lvl.next.title)}` : ' · maxed out'}</div>
-          <div class="xp-track"><i style="width:${Math.round(lvl.progress * 100)}%"></i></div>
+        <div class="hero-ring" style="--p:${Math.round(rank.progress * 100)}"><b>${rank.emoji}</b></div>
+        <div>
+          <div class="hero-title">${esc(rank.title)}</div>
+          <div class="hero-sub">${store.stars()} stars${rank.next ? ` · ${rank.toNext} to ${esc(rank.next.title)}` : ''}</div>
         </div>
       </div>
       <div class="stat-row">
         <div class="stat"><b>${today.reps}</b><span>reps today</span></div>
         <div class="stat"><b>${store.streak()}</b><span>day streak</span></div>
-        <div class="stat"><b>${today.workouts}</b><span>workouts</span></div>
+        <div class="stat"><b>${today.score.toLocaleString()}</b><span>aura today</span></div>
       </div>
     </div>
 
-    <div class="section-title">Today's pick</div>
-    <button class="routine" data-routine="${pick.id}" style="border-color:${pickArea.color}44">
-      <div class="routine-head">
-        <h3>${pickArea.emoji} ${esc(pick.name)}</h3>
-        ${laznessDots(pick.laziness)}
-      </div>
-      <div class="routine-blurb">${esc(pick.blurb)}</div>
-      <div class="routine-meta">
-        <span class="tag">${esc(pickArea.name)}</span>
-        ${positionTags(pick)}
-        <span class="tag">~${pick.minutes} min</span>
-        <span class="tag tag-xp">${routineXp(pick) * POINTS_PER_XP} pts</span>
-      </div>
-    </button>
-
-    <div class="section-title">Pick a target area</div>
-    <p class="tiny muted" style="margin:-4px 2px 10px">Every workout in here is done lying down — on your back, your side or face down. You will not be asked to stand up.</p>
-    <div class="card">
-      <div class="bodymap-wrap">
-        ${bodyMapSvg()}
-        <div class="area-list">
-          ${AREAS.map((a) => `
-            <button class="area-btn" data-area="${a.id}" style="--c:${a.color}">
-              <span class="emoji">${a.emoji}</span>
-              <span><b>${esc(a.name)}</b><small>${esc(a.blurb)}</small></span>
-              <span class="go">›</span>
-            </button>`).join('')}
+    ${WORLDS.map((world) => {
+      const levels = levelsOfWorld(world.id);
+      const done = levels.filter((l) => (byLevel[l.id] || 0) > 0).length;
+      return `<section class="world">
+        <div class="world-head">
+          <h2>${esc(world.name)}</h2>
+          <small>${done}/${levels.length} · ${esc(world.blurb)}</small>
         </div>
-      </div>
-      <p class="tiny muted" style="margin-top:12px">Tap a body part, pick a routine, put the phone on the floor beside you. The camera counts the reps while you lie there.</p>
-    </div>
-  `;
-
-  // Highlight the matching map region while a list row is hovered or focused.
-  const regions = screen.querySelectorAll('.bodymap .region');
-  const setHot = (areaId, on) => {
-    regions.forEach((r) => {
-      if (r.dataset.area === areaId) r.classList.toggle('is-active', on);
-    });
-    const btn = screen.querySelector(`.area-btn[data-area="${areaId}"]`);
-    if (btn) btn.classList.toggle('is-hot', on);
-  };
-  screen.querySelectorAll('.area-btn').forEach((btn) => {
-    const id = btn.dataset.area;
-    btn.addEventListener('pointerenter', () => setHot(id, true));
-    btn.addEventListener('pointerleave', () => setHot(id, false));
-    btn.addEventListener('focus', () => setHot(id, true));
-    btn.addEventListener('blur', () => setHot(id, false));
-    btn.addEventListener('click', () => go(`#/area/${id}`));
-  });
-  regions.forEach((r) => {
-    const id = r.dataset.area;
-    r.addEventListener('pointerenter', () => setHot(id, true));
-    r.addEventListener('pointerleave', () => setHot(id, false));
-    r.addEventListener('click', () => go(`#/area/${id}`));
-    r.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(`#/area/${id}`); }
-    });
-  });
-  screen.querySelector('[data-routine]')?.addEventListener('click', (e) => {
-    beginRoutine(e.currentTarget.dataset.routine);
-  });
-}
-
-/* ------------------------------------------------------------ area screen */
-
-function renderArea(areaId) {
-  const area = AREA_BY_ID[areaId];
-  if (!area) return go('#/home');
-  const routines = ROUTINES_BY_AREA(areaId);
-  const trained = store.getState().areaReps[areaId] || 0;
-
-  screen.innerHTML = `
-    <div class="card" style="border-color:${area.color}33">
-      <div class="hero">
-        <div class="hero-ring" style="--p:0;background:${area.color}22"><b>${area.emoji}</b></div>
-        <div class="hero-text">
-          <div class="hero-title">${esc(area.name)}</div>
-          <div class="hero-sub">${esc(area.blurb)} · ${trained.toLocaleString()} lifetime reps</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section-title">Routines — pick your effort level</div>
-    ${routines.map((r) => `
-      <button class="routine" data-routine="${r.id}">
-        <div class="routine-head">
-          <h3>${esc(r.name)}</h3>
-          ${laznessDots(r.laziness)}
-        </div>
-        <div class="routine-blurb">${esc(r.blurb)}</div>
-        <div class="routine-meta">
-          ${positionTags(r)}
-          <span class="tag">~${r.minutes} min</span>
-          <span class="tag">${routineReps(r)} reps</span>
-          <span class="tag tag-xp">${routineXp(r) * POINTS_PER_XP} pts</span>
-          ${r.xpMultiplier ? `<span class="tag tag-hot">${r.xpMultiplier}× score</span>` : ''}
-        </div>
-        <div style="margin-top:12px">
-          ${r.moves.map(([id, reps]) => {
-            const ex = EXERCISE_BY_ID[id];
-            return `<div class="move-line">
-              <span class="emoji">${ex.emoji}</span>
-              <b>${esc(ex.name)}</b>
-              <span>${reps} reps</span>
-            </div>`;
+        <div class="path">
+          <div class="path-line"></div>
+          ${levels.map((level) => {
+            const stars = byLevel[level.id] || 0;
+            const open = isUnlocked(level.id, byLevel);
+            const isNext = open && level.id === suggestion.id;
+            const view = VIEWS[levelView(level)];
+            return `<button class="node ${open ? '' : 'locked'} ${isNext ? 'next' : ''}"
+                            data-level="${level.id}" ${open ? '' : 'disabled'}>
+              <span class="node-orb" style="background:${world.color}">${open ? levelIndex(level.id) + 1 : '🔒'}</span>
+              <span class="node-body">
+                <b>${esc(level.name)}</b>
+                <small>${esc(view.label)} · ${levelReps(level)} reps</small>
+              </span>
+              ${starRow(stars)}
+            </button>`;
           }).join('')}
         </div>
-      </button>`).join('')}
+      </section>`;
+    }).join('')}
   `;
 
-  screen.querySelectorAll('[data-routine]').forEach((btn) => {
-    btn.addEventListener('click', () => beginRoutine(btn.dataset.routine));
+  screen.querySelectorAll('[data-level]').forEach((btn) => {
+    btn.addEventListener('click', () => go(`#/level/${btn.dataset.level}`));
   });
 }
 
-/* ----------------------------------------------------------- stats screen */
+/* ------------------------------------------------------------- level intro */
+
+/** A little drawing of where to put the phone for each setup. */
+function setupArt(view) {
+  const phone = (x, y, r) => `<rect x="${x}" y="${y}" width="14" height="24" rx="3" fill="#2A2333" opacity="0.85" transform="rotate(${r} ${x + 7} ${y + 12})"/>`;
+  if (view === 'prone') {
+    return `<svg width="86" height="64" viewBox="0 0 86 64" aria-hidden="true">
+      <path d="M12 46 q18 -12 40 -2 l16 4" stroke="#FF8FB1" stroke-width="7" fill="none" stroke-linecap="round"/>
+      <circle cx="12" cy="42" r="7" fill="#FF8FB1"/>
+      ${phone(4, 14, -12)}
+      <path d="M18 22 q10 6 8 14" stroke="#C9B8FF" stroke-width="2" fill="none" stroke-dasharray="3 3"/>
+    </svg>`;
+  }
+  if (view === 'propped') {
+    return `<svg width="86" height="64" viewBox="0 0 86 64" aria-hidden="true">
+      <path d="M22 48 h44" stroke="#7BD8C8" stroke-width="7" fill="none" stroke-linecap="round"/>
+      <circle cx="22" cy="44" r="7" fill="#7BD8C8"/>
+      ${phone(70, 30, 0)}
+      <path d="M64 42 q-14 2 -26 4" stroke="#C9B8FF" stroke-width="2" fill="none" stroke-dasharray="3 3"/>
+    </svg>`;
+  }
+  return `<svg width="86" height="64" viewBox="0 0 86 64" aria-hidden="true">
+    <path d="M16 44 h40 l14 6" stroke="#FF8FB1" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <circle cx="16" cy="40" r="7" fill="#FF8FB1"/>
+    ${phone(34, 8, 8)}
+    <path d="M42 32 q6 6 10 10" stroke="#C9B8FF" stroke-width="2" fill="none" stroke-dasharray="3 3"/>
+  </svg>`;
+}
+
+function renderLevel(levelId) {
+  const level = LEVEL_BY_ID[levelId] || ROUTINE_AS_LEVEL[levelId];
+  if (!level) return go('#/map');
+  const view = VIEWS[levelView(level)];
+  const stars = store.starsByLevel()[level.id] || 0;
+  const best = store.progressOf().levels?.[level.id]?.bestScore || 0;
+
+  screen.innerHTML = `
+    <div class="intro-hero">
+      <span class="big">${EXERCISE_BY_ID[level.moves[0][0]]?.emoji || '✦'}</span>
+      <h2>${esc(level.name)}</h2>
+      <p>${esc(level.blurb || '')}</p>
+      ${stars ? `<div class="stars-big" style="font-size:22px;margin-top:8px">${
+        [1, 2, 3].map((i) => `<span class="${i <= stars ? '' : 'off'}">★</span>`).join('')
+      }${best ? `<span class="tiny muted" style="letter-spacing:0"> best ${best.toLocaleString()}</span>` : ''}</div>` : ''}
+    </div>
+
+    <div class="card glass" style="margin-top:12px">
+      <div class="setup">
+        ${setupArt(levelView(level))}
+        <div>
+          <b>${esc(view.label)}</b>
+          <small>${esc(view.hint)}</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">Moves</div>
+    <div class="card glass">
+      ${level.moves.map(([id, reps]) => {
+        const ex = EXERCISE_BY_ID[id];
+        return `<div class="move-line">
+          <span class="emoji">${ex.emoji}</span>
+          <b>${esc(ex.name)}</b>
+          <span>${reps}</span>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div style="margin-top:18px">
+      <button class="btn btn-primary btn-block" id="startBtn">Start</button>
+    </div>
+    <p class="tiny muted" style="text-align:center;margin-top:10px">
+      Orbs appear where your ${level.moves.some(([id]) => EXERCISE_BY_ID[id].target?.joints?.some((j) => j.includes('KNEE'))) ? 'knees' : 'feet'} need to go. Pop them to score.
+    </p>
+  `;
+
+  el('startBtn').addEventListener('click', () => start(level));
+}
+
+/* ------------------------------------------------------------- quick play */
+
+/** Routines from the library, playable without unlocking anything. */
+const ROUTINE_AS_LEVEL = Object.fromEntries(ROUTINES.map((r) => [r.id, {
+  id: r.id, name: r.name, blurb: r.blurb, moves: r.moves, xpMultiplier: r.xpMultiplier, quick: true,
+}]));
+
+function renderFree() {
+  screen.innerHTML = `
+    <div class="section-title">Quick play</div>
+    <p class="tiny muted" style="margin:-4px 4px 12px">Any workout, any time — no unlocking. Nothing here counts toward stars.</p>
+    ${AREAS.map((area) => `
+      <div class="section-title" style="margin-top:18px">${area.emoji} ${esc(area.name)}</div>
+      ${ROUTINES_BY_AREA(area.id).map((r) => {
+        const view = VIEWS[levelView(r)];
+        return `<button class="node" data-quick="${r.id}" style="margin:6px 0">
+          <span class="node-orb" style="background:${area.color}">${r.minutes}′</span>
+          <span class="node-body">
+            <b>${esc(r.name)}</b>
+            <small>${esc(view.label)} · ${routineReps(r)} reps</small>
+          </span>
+        </button>`;
+      }).join('')}
+    `).join('')}
+  `;
+  screen.querySelectorAll('[data-quick]').forEach((btn) => {
+    btn.addEventListener('click', () => go(`#/level/${btn.dataset.quick}`));
+  });
+}
+
+/* -------------------------------------------------------------------- you */
 
 function fmtDuration(seconds) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.round(seconds % 60);
   if (h) return `${h}h ${m}m`;
-  return m ? `${m}m ${s}s` : `${s}s`;
+  return `${m}m ${Math.round(seconds % 60)}s`;
 }
 
-function renderStats() {
-  const s = store.getState();
+function renderMe() {
+  const p = store.activeProfile();
+  const prog = store.progressOf();
   const days = store.repsByDay(14);
   const max = Math.max(10, ...days.map((d) => d.reps));
   const todayKey = store.dayKey();
-  const maxArea = Math.max(1, ...AREAS.map((a) => s.areaReps[a.id] || 0));
-  const recent = [...s.sessions].reverse().slice(0, 12);
+  const s = store.getState().settings;
+  const starCount = store.stars();
 
   screen.innerHTML = `
-    <div class="card">
-      <div class="stat-row" style="margin-top:0">
-        <div class="stat"><b>${s.totalReps.toLocaleString()}</b><span>total reps</span></div>
-        <div class="stat"><b>${s.sessions.length}</b><span>workouts</span></div>
-        <div class="stat"><b>${fmtDuration(s.totalSeconds)}</b><span>moving</span></div>
+    <div class="card glass">
+      <div class="hero">
+        <div class="player-face" style="background:${p.color};width:64px;height:64px">${esc(p.name.slice(0, 1).toUpperCase())}</div>
+        <div>
+          <div class="hero-title">${esc(p.name)}</div>
+          <div class="hero-sub">${starCount} stars · ${prog.totalReps.toLocaleString()} reps · ${fmtDuration(prog.totalSeconds)}</div>
+        </div>
       </div>
     </div>
 
     <div class="section-title">Last 14 days</div>
-    <div class="card">
+    <div class="card glass">
       <div class="chart">
         ${days.map((d) => `
           <div class="chart-col ${d.key === todayKey ? 'today' : ''}" title="${d.key}: ${d.reps} reps">
@@ -290,89 +336,55 @@ function renderStats() {
       </div>
     </div>
 
-    <div class="section-title">Area mastery</div>
-    <div class="card mastery">
-      ${AREAS.map((a) => {
-        const reps = s.areaReps[a.id] || 0;
-        return `<div class="mastery-row" style="--c:${a.color}">
-          <span>${a.emoji}</span>
-          <span class="mastery-track"><i style="width:${Math.round((reps / maxArea) * 100)}%"></i></span>
-          <span class="tiny muted">${reps}</span>
-        </div>`;
+    <div class="section-title">Your aura</div>
+    <div class="skin-grid">
+      ${SKIN_IDS.map((id) => {
+        const skin = SKINS[id];
+        const unlocked = prog.unlockedSkins.includes(id);
+        const active = prog.skin === id;
+        return `<button class="skin ${unlocked ? '' : 'locked'}" data-skin="${id}" aria-pressed="${active}" ${unlocked ? '' : 'disabled'}>
+          <span class="dot" style="background:${skinSwatch(id, p.color)}"></span>
+          ${esc(skin.name)}
+          <small>${unlocked ? (active ? 'wearing' : 'tap to wear') : `${skin.unlockAt} ★`}</small>
+        </button>`;
       }).join('')}
     </div>
 
     <div class="section-title">Badges</div>
     <div class="badge-grid">
-      ${BADGES.map((b) => `
-        <div class="badge ${s.badges.includes(b.id) ? 'earned' : ''}" title="${esc(b.desc)}">
-          <span class="emoji">${b.emoji}</span>
-          <b>${esc(b.name)}</b>
+      ${store.BADGES.map((b) => `
+        <div class="badge ${prog.badges.includes(b.id) ? 'earned' : ''}" title="${esc(b.desc)}">
+          <span class="emoji">${b.emoji}</span><b>${esc(b.name)}</b>
         </div>`).join('')}
     </div>
 
-    <div class="section-title">History</div>
-    <div class="card">
-      ${recent.length ? recent.map((h) => {
-        const r = ROUTINE_BY_ID[h.routineId];
-        const a = AREA_BY_ID[h.area];
-        const when = new Date(h.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-        return `<div class="history-row">
-          <span>${a ? a.emoji : '🏋️'}</span>
-          <b>${esc(r ? r.name : h.routineId)}</b>
-          <span class="tiny muted">${h.reps} reps · +${h.xp} XP · ${when}</span>
-        </div>`;
-      }).join('') : `<div class="empty"><span class="big">🦥</span>No workouts yet. That is on brand, but let's fix it.</div>`}
-    </div>
-  `;
-}
-
-/* -------------------------------------------------------- settings screen */
-
-function toggleRow(key, title, desc) {
-  const on = store.getState().settings[key];
-  return `<div class="setting">
-    <div class="setting-text"><b>${esc(title)}</b><small>${esc(desc)}</small></div>
-    <button class="switch" role="switch" aria-checked="${on}" data-toggle="${key}" aria-label="${esc(title)}"></button>
-  </div>`;
-}
-
-function renderSettings() {
-  const s = store.getState();
-  screen.innerHTML = `
-    <div class="section-title">Feedback</div>
-    <div class="card">
-      ${toggleRow('sound', 'Sound effects', 'Blips when a rep lands')}
-      ${toggleRow('voice', 'Count out loud', 'Speaks the rep number')}
-      ${toggleRow('skeleton', 'Show tracking overlay', 'Draws the skeleton on the camera')}
-      ${toggleRow('mirror', 'Mirror the picture', 'Front camera looks like a mirror')}
-    </div>
-
-    <div class="section-title">Camera</div>
-    <div class="card">
-      <div class="setting" style="border:0">
-        <div class="setting-text">
-          <b>Default camera</b>
-          <small>Front is easier to see, rear sees your feet better</small>
-        </div>
-        <button class="btn" id="facingBtn">${s.settings.facing === 'user' ? 'Front' : 'Rear'}</button>
-      </div>
+    <div class="section-title">Settings</div>
+    <div class="card glass">
+      ${toggleRow('sound', 'Sound', 'Little pops when you hit an orb')}
+      ${toggleRow('voice', 'Count out loud', 'Speaks your rep count')}
+      ${toggleRow('showCamera', 'Show the room', 'Off means you only see your glowing self')}
     </div>
 
     <div class="section-title">How it works</div>
-    <div class="card tiny muted" style="line-height:1.6">
-      <p>Pose tracking runs entirely on your device using MediaPipe. Video frames never leave your phone and nothing is uploaded — progress is stored in this browser only.</p>
-      <p style="margin-top:8px">For the best rep counting: put the phone flat on the floor (or leaned against something low) about 2 metres away, side-on, so your whole body from head to feet is in shot. Keep the room reasonably lit. During the 3-2-1 countdown, lie still in the starting position — that is when the app works out which way up you are and learns your resting pose.</p>
-      <p style="margin-top:8px">If tracking gets confused, the <b>+1</b> button always counts a rep manually.</p>
+    <div class="card glass tiny muted" style="line-height:1.6">
+      <p>Body tracking runs entirely on your phone. No video is uploaded, and there is no server — your progress lives in this browser only.</p>
+      <p style="margin-top:8px">For the best tracking: even light, no baggy blankets over your legs, and keep your hips in shot. If an orb will not pop, tap <b>+1</b> and keep going.</p>
     </div>
 
     <div class="section-title">Danger zone</div>
-    <div class="card">
-      <button class="btn btn-danger btn-block" id="resetBtn">Erase all progress</button>
+    <div class="card glass">
+      <button class="btn btn-ghost btn-block" id="switchBtn">Switch player</button>
+      <button class="btn btn-ghost btn-block" id="resetBtn" style="color:#C2436B;margin-top:8px">Erase ${esc(p.name)}'s progress</button>
     </div>
-    <p class="tiny muted" style="text-align:center;margin-top:18px">Sloth Mode · v1 · no account, no cloud, no judgement</p>
+    <p class="tiny muted" style="text-align:center;margin-top:16px">aura · v2 · no account, no cloud</p>
   `;
 
+  screen.querySelectorAll('[data-skin]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      store.setSkin(btn.dataset.skin);
+      renderMe();
+    });
+  });
   screen.querySelectorAll('[data-toggle]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.toggle;
@@ -382,53 +394,68 @@ function renderSettings() {
       if (key === 'voice') setVoice(next);
     });
   });
-
-  el('facingBtn').addEventListener('click', (e) => {
-    const next = store.getState().settings.facing === 'user' ? 'environment' : 'user';
-    store.setSetting('facing', next);
-    e.currentTarget.textContent = next === 'user' ? 'Front' : 'Rear';
-  });
-
+  el('switchBtn').addEventListener('click', renderGate);
   el('resetBtn').addEventListener('click', () => {
-    if (confirm('Erase every rep, badge and level? This cannot be undone.')) {
-      store.resetProgress();
-      paintHeader();
-      toast('Progress erased. Fresh sloth.');
-      go('#/home');
+    if (confirm(`Erase all of ${p.name}'s stars and progress? This cannot be undone.`)) {
+      store.resetProfile();
+      toast('Progress erased.');
+      go('#/map');
     }
   });
 }
 
-/* --------------------------------------------------------- summary screen */
+function skinSwatch(id, color) {
+  return {
+    glow: `linear-gradient(135deg, ${color}, #fff)`,
+    rainbow: 'linear-gradient(135deg,#FF9BB8,#FFD79B,#9BE8D2,#9BB8FF)',
+    sparkle: `linear-gradient(135deg, ${color}, #FFFFFF 70%)`,
+    galaxy: 'linear-gradient(135deg,#2B1B5A,#5A2E8C,#1B2E6B)',
+    mermaid: 'linear-gradient(135deg,#3FD8C8,#7FE9E0,#C9A7FF)',
+    ice: 'linear-gradient(135deg,#EAF7FF,#6FB8F5)',
+    ember: 'linear-gradient(135deg,#FFD36E,#FF5E3A)',
+  }[id] || color;
+}
 
-function renderSummary() {
-  if (!lastSummary) return go('#/home');
-  const { result, saved } = lastSummary;
-  const routine = ROUTINE_BY_ID[result.routineId];
-  const area = AREA_BY_ID[routine?.area];
-  const pct = result.targetReps ? Math.round((result.reps / result.targetReps) * 100) : 0;
+function toggleRow(key, title, desc) {
+  const on = store.getState().settings[key];
+  return `<div class="setting">
+    <div class="setting-text"><b>${esc(title)}</b><small>${esc(desc)}</small></div>
+    <button class="switch" role="switch" aria-checked="${on}" data-toggle="${key}" aria-label="${esc(title)}"></button>
+  </div>`;
+}
+
+/* ---------------------------------------------------------------- results */
+
+function renderResults() {
+  if (!lastResult) return go('#/map');
+  const { result, saved, level } = lastResult;
+  const nextUp = LEVEL_BY_ID[LEVELS[levelIndex(level.id) + 1]?.id];
 
   screen.innerHTML = `
-    <div class="summary-hero">
-      <span class="big">${result.perfect ? '🏆' : pct >= 60 ? '💪' : '🦥'}</span>
-      <h2>${result.perfect ? 'Every single rep.' : pct >= 60 ? 'Good enough. Genuinely.' : 'Something beats nothing.'}</h2>
-      <div class="summary-xp">${(result.score ?? saved.entry.xp * POINTS_PER_XP).toLocaleString()}</div>
-      <div class="tiny muted" style="letter-spacing:.16em;text-transform:uppercase;margin-top:-4px">final score · +${saved.entry.xp} XP</div>
-      <p class="muted">${esc(routine?.name || 'Workout')} · ${area ? esc(area.name) : ''}</p>
+    <div class="result-hero">
+      <div class="stars-big">${[1, 2, 3].map((i) => `<span class="${i <= result.stars ? '' : 'off'}">★</span>`).join('')}</div>
+      <div class="result-score">${result.score.toLocaleString()}<small>aura</small></div>
+      <p class="muted">${esc(level.name)}</p>
     </div>
 
-    <div class="card">
+    <div class="card glass">
       <div class="stat-row" style="margin-top:0">
-        <div class="stat"><b>${result.reps}</b><span>reps done</span></div>
-        <div class="stat"><b>${pct}%</b><span>of target</span></div>
-        <div class="stat"><b>${fmtDuration(result.seconds)}</b><span>elapsed</span></div>
+        <div class="stat"><b>${result.reps}</b><span>reps</span></div>
+        <div class="stat"><b>${result.bestCombo}</b><span>best combo</span></div>
+        <div class="stat"><b>${result.spawned ? Math.round((result.hits / result.spawned) * 100) : 0}%</b><span>orbs hit</span></div>
       </div>
     </div>
 
-    ${saved.leveledUp ? `<div class="levelup">
-      <div style="font-size:34px">${saved.level.emoji}</div>
-      <b>Level ${saved.level.level} — ${esc(saved.level.title)}</b>
-      <div class="tiny muted">New rank unlocked</div>
+    ${saved.newSkins.length ? `<div class="prize">
+      <div style="font-size:30px">✦</div>
+      <b>New aura unlocked: ${saved.newSkins.map((s) => esc(SKINS[s].name)).join(', ')}</b>
+      <div class="tiny muted">Put it on from the You tab</div>
+    </div>` : ''}
+
+    ${saved.rankUp ? `<div class="prize">
+      <div style="font-size:30px">${saved.rank.emoji}</div>
+      <b>${esc(saved.rank.title)}</b>
+      <div class="tiny muted">New rank</div>
     </div>` : ''}
 
     ${saved.earned.length ? `<div class="section-title">New badges</div>
@@ -437,33 +464,48 @@ function renderSummary() {
     </div>` : ''}
 
     <div class="section-title">Move by move</div>
-    <div class="card">
+    <div class="card glass">
       ${result.perMove.map((m) => `
         <div class="move-line">
           <span class="emoji">${m.emoji}</span>
           <b>${esc(m.name)}</b>
-          <span>${m.reps}/${m.target}${m.reps >= m.target ? ' ✅' : ''}</span>
+          <span>${m.reps}/${m.target}${m.reps >= m.target ? ' ✓' : ''}</span>
         </div>`).join('')}
     </div>
 
-    <div style="display:flex;gap:10px;margin-top:20px">
-      <button class="btn btn-block" id="againBtn">Again</button>
-      <button class="btn btn-primary btn-block" id="doneBtn">Done</button>
+    <div class="row" style="margin-top:18px">
+      <button class="btn" id="againBtn">Again</button>
+      <button class="btn btn-primary" id="doneBtn">${nextUp && !level.quick ? 'Next level' : 'Done'}</button>
     </div>
   `;
 
-  el('againBtn').addEventListener('click', () => beginRoutine(result.routineId));
-  el('doneBtn').addEventListener('click', () => go('#/home'));
+  el('againBtn').addEventListener('click', () => start(level));
+  el('doneBtn').addEventListener('click', () => {
+    if (nextUp && !level.quick) go(`#/level/${nextUp.id}`);
+    else go('#/map');
+  });
+}
+
+/* ------------------------------------------------------------ play a level */
+
+async function start(level) {
+  unlockAudio();
+  const result = await playLevel(level, { style: store.activeStyle() });
+  if (!result || result.reps === 0) {
+    if (result) toast('No reps counted — nothing saved.');
+    render();
+    return;
+  }
+  // Quick-play sessions are for fun; only map levels move the star count.
+  const saved = level.quick
+    ? { earned: [], newSkins: [], rankUp: false, rank: store.rankFor(store.stars()), stars: store.stars() }
+    : store.recordLevel(result);
+  lastResult = { result, saved, level };
+  if (saved.rankUp || saved.newSkins.length) sfx.levelUp();
+  go('#/results');
 }
 
 /* ----------------------------------------------------------------- router */
-
-const ROUTES = {
-  home: renderHome,
-  stats: renderStats,
-  settings: renderSettings,
-  summary: renderSummary,
-};
 
 function go(hash) {
   if (location.hash === hash) render();
@@ -471,49 +513,22 @@ function go(hash) {
 }
 
 function render() {
-  const hash = location.hash.replace(/^#\/?/, '') || 'home';
+  if (!store.activeProfile()) { renderGate(); return; }
+  const hash = location.hash.replace(/^#\/?/, '') || 'map';
   const [route, param] = hash.split('/');
-  paintHeader();
+  paintWho();
 
-  const isTop = ['home', 'stats', 'settings'].includes(route);
+  const isTop = ['map', 'free', 'me'].includes(route);
   el('backBtn').hidden = isTop;
-  document.querySelectorAll('.tab').forEach((t) => {
-    t.classList.toggle('is-active', t.dataset.route === route);
-  });
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.route === route));
 
-  if (route === 'area') renderArea(param);
-  else (ROUTES[route] || renderHome)();
+  if (route === 'level') renderLevel(param);
+  else if (route === 'results') renderResults();
+  else if (route === 'free') renderFree();
+  else if (route === 'me') renderMe();
+  else renderMap();
 
-  screen.scrollTop = 0;
   window.scrollTo(0, 0);
-}
-
-/* ---------------------------------------------------------------- session */
-
-async function beginRoutine(routineId) {
-  const routine = ROUTINE_BY_ID[routineId];
-  if (!routine) return;
-  unlockAudio();          // iOS needs the gesture that started the workout
-  const result = await runSession(routine);
-  if (!result || result.reps === 0) {
-    if (result) toast('No reps counted — nothing saved.');
-    render();
-    return;
-  }
-  const saved = store.recordSession({
-    routineId: routine.id,
-    area: routine.area,
-    reps: result.reps,
-    targetReps: result.targetReps,
-    xp: result.xp,
-    seconds: result.seconds,
-    perfect: result.perfect,
-    perMove: result.perMove.map((m) => ({ id: m.id, reps: m.reps, target: m.target })),
-  });
-  lastSummary = { result, saved };
-  if (saved.leveledUp) sfx.levelUp();
-  confetti(result.perfect ? 3200 : 2200);
-  go('#/summary');
 }
 
 /* -------------------------------------------------------------------- init */
@@ -521,18 +536,19 @@ async function beginRoutine(routineId) {
 function init() {
   store.load();
   setVoice(store.getState().settings.voice);
+  wireGate();
 
   el('backBtn').addEventListener('click', () => {
     if (history.length > 1) history.back();
-    else go('#/home');
+    else go('#/map');
   });
   document.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', () => go(`#/${tab.dataset.route}`));
   });
   window.addEventListener('hashchange', render);
-  store.subscribe(paintHeader);
 
-  render();
+  if (store.activeProfile()) enterApp();
+  else renderGate();
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline is optional */ });

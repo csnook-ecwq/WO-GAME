@@ -16,8 +16,8 @@ const DEFAULT_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.1
 function poseBase() {
   try {
     const fromUrl = new URLSearchParams(location.search).get('poseBase');
-    if (fromUrl) localStorage.setItem('slothmode.poseBase', fromUrl);
-    return fromUrl || localStorage.getItem('slothmode.poseBase') || '';
+    if (fromUrl) localStorage.setItem('aura.poseBase', fromUrl);
+    return fromUrl || localStorage.getItem('aura.poseBase') || '';
   } catch { return ''; }
 }
 
@@ -33,6 +33,7 @@ const MODELS = BASE
 
 let visionModule = null;
 let landmarker = null;
+let landmarkerKey = '';
 let loadingPromise = null;
 
 async function loadVision() {
@@ -50,30 +51,40 @@ async function loadVision() {
   throw new Error(`Could not load the pose library (${lastErr?.message || lastErr}). Check your connection.`);
 }
 
-/** Loads (once) and returns the shared PoseLandmarker. */
-export async function getLandmarker({ model = 'lite' } = {}) {
-  if (landmarker) return landmarker;
-  if (loadingPromise) return loadingPromise;
+/**
+ * Loads (once) and returns the shared PoseLandmarker.
+ *
+ * `segmentation` asks the model for a per-pixel body mask as well as landmarks —
+ * that mask is what makes the ghost contour to your actual body instead of being
+ * a stick figure. `players` is how many bodies to look for at once.
+ */
+export async function getLandmarker({ model = 'lite', segmentation = true, players = 1 } = {}) {
+  const wanted = `${model}:${segmentation}:${players}`;
+  if (landmarker && landmarkerKey === wanted) return landmarker;
+  if (loadingPromise && landmarkerKey === wanted) return loadingPromise;
+
+  // Options are baked in at creation, so changing them means a new instance.
+  if (landmarker) { try { landmarker.close(); } catch { /* already gone */ } landmarker = null; }
+  landmarkerKey = wanted;
+
   loadingPromise = (async () => {
     const vision = await loadVision();
     const fileset = await vision.FilesetResolver.forVisionTasks(WASM);
+    const options = (delegate) => ({
+      baseOptions: { modelAssetPath: MODELS[model] || MODELS.lite, delegate },
+      runningMode: 'VIDEO',
+      numPoses: Math.max(1, Math.min(4, players)),
+      outputSegmentationMasks: segmentation,
+      minPoseDetectionConfidence: 0.5,
+      minPosePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
     try {
-      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODELS[model] || MODELS.lite, delegate: 'GPU' },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
+      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, options('GPU'));
     } catch (err) {
       // Plenty of phones have no usable WebGL delegate; CPU is slower but works.
       console.warn('GPU delegate unavailable, falling back to CPU.', err);
-      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODELS[model] || MODELS.lite, delegate: 'CPU' },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-      });
+      landmarker = await vision.PoseLandmarker.createFromOptions(fileset, options('CPU'));
     }
     return landmarker;
   })();
@@ -172,6 +183,7 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
   let raf = 0;
   let lastVideoTime = -1;
   let lastLandmarks = null;
+  let lastPeople = [];      // [{ landmarks, mask, maskRotation }]
   let inferMs = 0;          // smoothed cost of one detection
   let nextInferAt = 0;
 
@@ -254,9 +266,25 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
       const deg = probing ? ROTATIONS[probeIndex] : rotation;
       const t0 = performance.now();
       let raw = null;
+      let masks = null;
       try {
         const result = model.detectForVideo(sourceFor(deg), now);
-        raw = result?.landmarks?.[0] || null;
+        raw = result?.landmarks || null;
+        // Masks returned by this call are copies we own, so pull the pixels out
+        // and close them immediately — holding them across frames leaks GPU
+        // memory and the data is stale by the next detection anyway.
+        if (result?.segmentationMasks?.length) {
+          masks = result.segmentationMasks.map((m) => {
+            try {
+              return { data: m.getAsUint8Array(), width: m.width, height: m.height };
+            } catch (err) {
+              console.debug('mask read failed', err);
+              return null;
+            } finally {
+              try { m.close(); } catch { /* already released */ }
+            }
+          });
+        }
       } catch (err) {
         // A dropped frame is not worth killing the session over.
         console.debug('pose frame skipped', err);
@@ -266,17 +294,22 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
       nextInferAt = performance.now() + budget;
 
       if (probing) {
-        advanceProbe(scoreLandmarks(raw));
-        lastLandmarks = null;
+        advanceProbe(scoreLandmarks(raw?.[0] || null));
+        lastPeople = [];
       } else {
-        lastLandmarks = raw ? raw.map((p) => mapFromRotated(p, deg)) : null;
-        // If the body disappears for a while, the phone was probably moved or
-        // we rolled onto our side: go looking for the right rotation again.
-        lostDetections = raw ? 0 : lostDetections + 1;
+        lastPeople = (raw || []).map((lm, i) => ({
+          landmarks: lm.map((p) => mapFromRotated(p, deg)),
+          mask: masks?.[i] || null,
+          maskRotation: deg,
+        }));
+        // If everyone disappears for a while, the phone was probably moved or we
+        // rolled onto our side: go looking for the right rotation again.
+        lostDetections = lastPeople.length ? 0 : lostDetections + 1;
         if (lostDetections >= LOST_BEFORE_REPROBE) startProbe();
       }
+      lastLandmarks = lastPeople[0]?.landmarks || null;
     }
-    onFrame(lastLandmarks, now, { probing, rotation });
+    onFrame(lastLandmarks, now, { probing, rotation, people: lastPeople, inferenceMs: inferMs });
   };
 
   return {
@@ -285,6 +318,8 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
     get running() { return running; },
     /** Smoothed ms per detection — used to warn about struggling devices. */
     get inferenceMs() { return inferMs; },
+    /** Everyone currently detected, with their body masks. */
+    get people() { return lastPeople; },
     /** Work out which way up the body is. Called at the start of each move. */
     probeOrientation() { startProbe(); },
     get probing() { return probing; },

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<title>Sloth Mode — the lazy workout game</title>
-<meta name="description" content="A lazy workout game. Pick a body part, prop your phone up, and let the camera count your reps by watching your feet." />
-<meta name="theme-color" content="#0B0A14" />
+<title>Aura — the lying-down game</title>
+<meta name="description" content="A game you play lying down. Pop glowing orbs with your feet and watch your own aura light up." />
+<meta name="theme-color" content="#FDF7F9" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Sloth Mode" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Aura" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="assets/icon.svg" />
@@ -16,85 +16,104 @@
 </head>
 <body>
 
-<div id="app">
-  <header class="topbar" id="topbar">
-    <button class="topbar-back" id="backBtn" aria-label="Back" hidden>‹</button>
-    <div class="topbar-brand">
-      <span class="brand-mark">🦥</span>
-      <span class="brand-name">SLOTH<span>MODE</span></span>
-    </div>
-    <div class="topbar-stats">
-      <div class="chip chip-streak" id="streakChip" title="Day streak">🔥 <b>0</b></div>
-      <div class="chip chip-level" id="levelChip" title="Level">Lv <b>1</b></div>
-    </div>
+<!-- Who's playing -->
+<section id="gate" class="gate" hidden>
+  <div class="gate-inner">
+    <div class="brand"><span class="brand-mark">✦</span><span class="brand-name">aura</span></div>
+    <h1 class="gate-title">Who's playing?</h1>
+    <div class="player-grid" id="playerGrid"></div>
+    <form class="new-player glass" id="newPlayer" hidden>
+      <label class="field">
+        <span>Name</span>
+        <input id="newName" type="text" maxlength="14" autocomplete="off" placeholder="Your name" required />
+      </label>
+      <div class="field">
+        <span>Colour</span>
+        <div class="swatches" id="newColors"></div>
+      </div>
+      <label class="check">
+        <input id="newKid" type="checkbox" />
+        <span>This is a kid's profile<small>Keeps the body journal off this profile entirely</small></span>
+      </label>
+      <div class="row">
+        <button type="button" class="btn btn-ghost" id="newCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- Main app -->
+<div id="app" hidden>
+  <header class="topbar glass" id="topbar">
+    <button class="icon-btn" id="backBtn" aria-label="Back" hidden>‹</button>
+    <div class="topbar-brand"><span class="brand-mark">✦</span><span class="brand-name">aura</span></div>
+    <button class="who" id="whoBtn" aria-label="Switch player"><span id="whoDot" class="who-dot"></span><span id="whoName">—</span></button>
   </header>
 
   <main id="screen" class="screen" tabindex="-1"></main>
 
-  <nav class="tabbar" id="tabbar">
-    <button class="tab is-active" data-route="home"><span>🏠</span>Train</button>
-    <button class="tab" data-route="stats"><span>📈</span>Progress</button>
-    <button class="tab" data-route="settings"><span>⚙️</span>Settings</button>
+  <nav class="tabbar glass" id="tabbar">
+    <button class="tab is-active" data-route="map"><span>✧</span>Play</button>
+    <button class="tab" data-route="free"><span>◔</span>Quick</button>
+    <button class="tab" data-route="me"><span>◕</span>You</button>
   </nav>
 </div>
 
-<!-- Full screen AR session -->
-<section id="session" class="session" hidden aria-hidden="true">
-  <video id="video" class="session-video" playsinline muted autoplay></video>
-  <canvas id="overlay" class="session-overlay"></canvas>
+<!-- The game itself -->
+<section id="game" class="game" hidden>
+  <video id="video" class="game-video" playsinline muted autoplay></video>
+  <canvas id="stage" class="game-stage"></canvas>
 
-  <div class="session-ui">
-    <div class="session-top">
-      <button class="icon-btn" id="quitBtn" aria-label="Quit workout">✕</button>
-      <div class="session-title">
-        <div class="session-move" id="sessionMove">—</div>
-        <div class="session-step" id="sessionStep">Move 1 of 1</div>
+  <div class="game-ui">
+    <div class="game-top">
+      <button class="icon-btn glass" id="gameQuit" aria-label="Finish">✕</button>
+      <div class="game-title">
+        <div class="game-move" id="gameMove">—</div>
+        <div class="game-step" id="gameStep">1 of 1</div>
       </div>
-      <button class="icon-btn" id="flipBtn" aria-label="Switch camera">🔄</button>
+      <button class="icon-btn glass" id="gameCamera" aria-pressed="false" aria-label="Show the room">◉</button>
     </div>
 
-    <div class="session-scorebar">
-      <div class="score-chip">SCORE <b id="scoreValue">0</b></div>
-      <div class="score-pop" id="scorePop" hidden></div>
+    <div class="score-row">
+      <div class="score glass"><b id="gameScore">0</b><span>aura</span></div>
+      <div class="combo" id="gameCombo"></div>
     </div>
 
-    <div class="session-coach" id="coach" hidden></div>
+    <div class="game-coach glass" id="gameCoach" hidden></div>
 
-    <div class="session-center" id="sessionCenter">
-      <div class="countdown" id="countdown" hidden></div>
-    </div>
+    <div class="game-middle"><div class="countdown" id="gameCountdown" hidden></div></div>
 
-    <div class="session-bottom">
-      <div class="rep-block">
-        <div class="rep-count"><span id="repCount">0</span><small id="repTarget">/ 0</small></div>
-        <div class="rep-bar"><i id="repBar"></i></div>
-        <div class="rep-cue" id="repCue">Get in frame</div>
-      </div>
-      <div class="session-actions">
-        <button class="pill-btn" id="pauseBtn">Pause</button>
-        <button class="pill-btn pill-ghost" id="manualBtn" title="Count a rep by hand">+1</button>
-        <button class="pill-btn pill-ghost" id="skipBtn">Skip</button>
+    <div class="game-bottom">
+      <div class="reps"><span id="gameReps">0</span><small id="gameRepTarget">/ 0</small></div>
+      <div class="reps-bar"><i id="gameBar"></i></div>
+      <div class="game-actions">
+        <button class="pill glass" id="gamePause">Pause</button>
+        <button class="pill pill-solid" id="gameManual">+1</button>
+        <button class="pill glass" id="gameSkip">Skip</button>
       </div>
     </div>
   </div>
 
-  <div class="session-rest" id="restPanel" hidden>
-    <div class="rest-card">
-      <div class="rest-label">Rest</div>
-      <div class="rest-timer" id="restTimer">15</div>
-      <div class="rest-next" id="restNext">Next: —</div>
-      <button class="btn btn-primary" id="restSkip">Skip rest</button>
+  <div class="veil" id="gameRest" hidden>
+    <div class="veil-card glass">
+      <div class="veil-label">Rest</div>
+      <div class="veil-big" id="gameRestTimer">12</div>
+      <div class="veil-sub" id="gameRestNext">—</div>
+      <button class="btn btn-primary" id="gameRestSkip">Skip rest</button>
     </div>
   </div>
 
-  <div class="session-loading" id="sessionLoading">
-    <div class="loader"></div>
-    <p id="loadingText">Waking up the camera…</p>
-    <button class="btn btn-ghost" id="loadingCancel">Cancel</button>
+  <div class="veil" id="gameLoading">
+    <div class="veil-card glass">
+      <div class="loader"></div>
+      <p id="gameLoadingText">Waking up the camera…</p>
+      <button class="btn btn-ghost" id="gameLoadingCancel">Cancel</button>
+    </div>
   </div>
 </section>
 
-<div id="toast" class="toast" hidden></div>
+<div id="toast" class="toast glass" hidden></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

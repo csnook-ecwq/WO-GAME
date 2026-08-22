@@ -39,14 +39,47 @@ export function visibilityOf(landmarks, indices) {
 }
 
 /**
- * Pre-computes the derived points every signal needs, plus a body `scale`
- * (roughly torso length) used to make thresholds independent of how far you
- * are from the camera.
+ * Reference frame tiers, best first.
+ *
+ * `torso` needs your shoulders in shot. `pelvis` needs only your hips and knees,
+ * which is what the camera sees when you hold the phone above your hips and look
+ * down your own legs — the primary way this app is played.
  */
-export function buildFrame(landmarks) {
+export const TIER = { TORSO: 'torso', PELVIS: 'pelvis' };
+
+/** How much better than nothing a tier is, for "do I have enough to count?" checks. */
+export const TIER_RANK = { [TIER.TORSO]: 2, [TIER.PELVIS]: 1 };
+
+/** Hip width is roughly this fraction of torso length; keeps the two tiers' units comparable. */
+const HIP_TO_TORSO = 1.3;
+
+const unit = (vx, vy) => {
+  const len = Math.hypot(vx, vy) || 1e-6;
+  return { x: vx / len, y: vy / len };
+};
+
+/**
+ * Pre-computes the derived points every signal needs, plus a body `scale` used
+ * to make thresholds independent of how far you are from the camera.
+ *
+ * @param {Array} landmarks 33 pose landmarks
+ * @param {{headWard?: {x:number,y:number}, minVisibility?: number}} [opts]
+ *        `headWard` is the locked head-ward direction captured during the
+ *        countdown. It matters more than it looks: in the pelvis tier the only
+ *        clue to which way is "up the body" is that your knees sit below your
+ *        hips — which stops being true the moment you pull your knees to your
+ *        chest. Locking the direction once keeps the frame still while you move.
+ */
+export function buildFrame(landmarks, opts = {}) {
   if (!landmarks || landmarks.length < 33) return null;
+  const minVis = opts.minVisibility ?? 0.35;
   const p = (i) => landmarks[i];
+  const seen = (...idx) => idx.every((i) => vis(p(i)) >= minVis);
   const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+  // Hips anchor everything — without them there is no body frame at all.
+  if (!seen(LM.L_HIP, LM.R_HIP)) return null;
+
   const shoulderMid = mid(p(LM.L_SHOULDER), p(LM.R_SHOULDER));
   const hipMid = mid(p(LM.L_HIP), p(LM.R_HIP));
   const ankleMid = mid(p(LM.L_ANKLE), p(LM.R_ANKLE));
@@ -54,25 +87,61 @@ export function buildFrame(landmarks) {
   const torso = dist(shoulderMid, hipMid);
   const hipWidth = dist(p(LM.L_HIP), p(LM.R_HIP));
   const thigh = dist(hipMid, kneeMid);
-  // A body seen end-on foreshortens the torso, so fall back to hip width.
-  const scale = Math.max(torso, hipWidth * 1.3, 0.08);
+
+  // Shoulders are only usable if they are both visible AND far enough from the
+  // hips to give a meaningful direction — a torso seen end-on collapses to noise.
+  const torsoUsable = seen(LM.L_SHOULDER, LM.R_SHOULDER) && torso > hipWidth * 0.35;
+  const tier = torsoUsable ? TIER.TORSO : TIER.PELVIS;
+
+  let u;
+  if (torsoUsable) {
+    u = unit(shoulderMid.x - hipMid.x, shoulderMid.y - hipMid.y);
+  } else {
+    // Pelvis tier: the hip line is rigid, so its perpendicular is a stable body
+    // axis no matter what the legs are doing. Two perpendiculars exist; pick the
+    // head-ward one.
+    const hipLine = unit(p(LM.R_HIP).x - p(LM.L_HIP).x, p(LM.R_HIP).y - p(LM.L_HIP).y);
+    const candidate = { x: -hipLine.y, y: hipLine.x };
+    const locked = opts.headWard;
+    if (locked) {
+      // Stay with the direction captured at calibration.
+      const agrees = candidate.x * locked.x + candidate.y * locked.y >= 0;
+      u = agrees ? candidate : { x: -candidate.x, y: -candidate.y };
+    } else if (seen(LM.L_KNEE, LM.R_KNEE)) {
+      // First guess: head-ward is whichever way points away from the knees.
+      const toKnees = { x: kneeMid.x - hipMid.x, y: kneeMid.y - hipMid.y };
+      const pointsAtKnees = candidate.x * toKnees.x + candidate.y * toKnees.y > 0;
+      u = pointsAtKnees ? { x: -candidate.x, y: -candidate.y } : candidate;
+    } else {
+      return null;   // no shoulders and no knees: nothing to orient against
+    }
+  }
+
+  const n = { x: -u.y, y: u.x };
+  const scale = torsoUsable
+    ? Math.max(torso, hipWidth * HIP_TO_TORSO, 0.08)
+    : Math.max(hipWidth * HIP_TO_TORSO, 0.08);
   // The spine shortens when you curl up, so any signal measuring the torso
   // folding must be normalised by something that does not move with it.
-  const rigid = Math.max(thigh, hipWidth * 1.3, 0.05);
+  const rigid = Math.max(thigh, hipWidth * HIP_TO_TORSO, 0.05);
 
-  // Body reference frame: `u` runs from the hips toward the head, `n` is
-  // perpendicular to it (the direction the belly or back faces). Measuring in
-  // this frame is what makes every signal rotation-independent.
-  const axisLen = Math.max(torso, 1e-6);
-  const u = { x: (shoulderMid.x - hipMid.x) / axisLen, y: (shoulderMid.y - hipMid.y) / axisLen };
-  const n = { x: -u.y, y: u.x };
   const along = (q) => ((q.x - hipMid.x) * u.x + (q.y - hipMid.y) * u.y) / scale;
   const across = (q) => ((q.x - hipMid.x) * n.x + (q.y - hipMid.y) * n.y) / scale;
+  /** Inverse of along/across: body-frame offsets back to image coordinates. */
+  const place = (a, c) => ({
+    x: hipMid.x + (u.x * a + n.x * c) * scale,
+    y: hipMid.y + (u.y * a + n.y * c) * scale,
+  });
 
   return {
-    lm: landmarks, p, shoulderMid, hipMid, ankleMid, kneeMid,
-    torso, hipWidth, thigh, scale, rigid, u, n, along, across,
+    lm: landmarks, p, tier, shoulderMid, hipMid, ankleMid, kneeMid,
+    torso, hipWidth, thigh, scale, rigid, u, n, headWard: u, along, across, place,
   };
+}
+
+/** True when a frame is good enough for a signal that needs `required`. */
+export function tierSatisfies(frameTier, required) {
+  return (TIER_RANK[frameTier] || 0) >= (TIER_RANK[required] || 0);
 }
 
 /** Perpendicular distance from point q to the line through a and b. */
@@ -130,8 +199,26 @@ export const SIGNALS = {
 
   /* --- joint angles: identical from any camera angle -------------------- */
 
-  /** Hip folding: knees toward the chest, or legs lowering away from it. */
-  hipTuck: (f) => (180 - angleAt(f.shoulderMid, f.hipMid, f.kneeMid)) / 90,
+  /**
+   * Hip folding: knees toward the chest, or legs lowering away from it.
+   *
+   * Measured against the frame's head-ward axis rather than the shoulders, so it
+   * reads the same whether the camera can see your torso or only your hips and
+   * legs. In the torso tier this is arithmetically identical to the angle
+   * shoulder-hip-knee; in the pelvis tier it still works, which matters because
+   * knee tucks are the signature move of the whole app.
+   */
+  hipTuck: (f) => {
+    const vx = f.kneeMid.x - f.hipMid.x;
+    const vy = f.kneeMid.y - f.hipMid.y;
+    const len = Math.hypot(vx, vy) || 1e-6;
+    const cos = Math.max(-1, Math.min(1, (vx * f.u.x + vy * f.u.y) / len));
+    const deg = (Math.acos(cos) * 180) / Math.PI;   // 0 = knees at chest, 180 = legs straight
+    return (180 - deg) / 90;
+  },
+  /** One leg lifted away from the floor while face down (prone kickbacks). */
+  legLift: (f) =>
+    Math.max(Math.abs(f.across(f.p(LM.L_ANKLE))), Math.abs(f.across(f.p(LM.R_ANKLE)))),
   /**
    * Shoulders curling toward the knees (crunches, sit-backs). Normalised by the
    * thigh rather than the torso: curling shortens the measured torso, which
@@ -164,6 +251,23 @@ export const SIGNALS = {
   /** Hips pushed away from the shoulder-to-knee line (glute bridges). */
   bridge: (f) => distanceToLine(f.hipMid, f.shoulderMid, f.kneeMid) / f.scale,
 };
+
+/**
+ * The reference frame each signal needs. Anything listed as `torso` measures the
+ * upper body and therefore only works with the phone propped where it can see
+ * your shoulders; everything else survives the hand-held, legs-only view.
+ */
+export const SIGNAL_TIER = {
+  crunch: TIER.TORSO,
+  bridge: TIER.TORSO,
+  elbowBend: TIER.TORSO,
+  elbowAlternate: TIER.TORSO,
+  armSpread: TIER.TORSO,
+  armReach: TIER.TORSO,
+};
+
+/** @returns {'torso'|'pelvis'} the frame tier a signal requires. */
+export const tierFor = (signal) => SIGNAL_TIER[signal] || TIER.PELVIS;
 
 const median = (xs) => {
   if (!xs.length) return 0;
@@ -322,27 +426,47 @@ export function createExerciseTracker(exercise) {
   const counter = createRepCounter(exercise.detector || {});
   const needs = exercise.needs || [];
   const minVis = exercise.minVisibility ?? 0.45;
+  const required = tierFor(exercise.signal);
+
+  // Captured during the countdown and held for the rest of the set.
+  let headWard = null;
 
   return {
     counter,
     exercise,
-    reset: () => counter.reset(),
+    requiredTier: required,
+    get headWard() { return headWard; },
+    reset() { counter.reset(); headWard = null; },
     /**
      * @param {Array} landmarks 33 pose landmarks (or null when nobody is seen)
      * @param {number} tMs
      * @param {boolean} calibrating true during the get-ready countdown
      */
     update(landmarks, tMs, calibrating = false) {
-      const frame = buildFrame(landmarks);
-      if (!frame) {
+      if (!landmarks) {
         return { tracking: false, reason: 'nobody', reps: counter.reps, repDelta: 0, progress: 0 };
+      }
+      const frame = buildFrame(landmarks, { headWard });
+      if (!frame) {
+        // You are in shot, but the parts that define a body frame are not.
+        return { tracking: false, reason: 'framing', reps: counter.reps, repDelta: 0, progress: 0 };
+      }
+      if (!tierSatisfies(frame.tier, required)) {
+        // We can see you, just not enough of you for this particular move.
+        return {
+          tracking: false, reason: 'tier', tier: frame.tier, requiredTier: required,
+          reps: counter.reps, repDelta: 0, progress: 0, frame,
+        };
       }
       const v = visibilityOf(landmarks, needs);
       if (v < minVis) {
-        return { tracking: false, reason: 'framing', visibility: v, reps: counter.reps, repDelta: 0, progress: 0 };
+        return { tracking: false, reason: 'framing', visibility: v, reps: counter.reps, repDelta: 0, progress: 0, frame };
       }
       const value = signalFn(frame);
       if (calibrating) {
+        // Lock which way is head-ward while you are still lying at rest, before
+        // any knee can travel above the hip line and confuse the pelvis frame.
+        if (!headWard) headWard = { x: frame.u.x, y: frame.u.y };
         counter.calibrate(value);
         return { tracking: true, calibrating: true, reps: counter.reps, repDelta: 0, progress: 0, frame, value };
       }
