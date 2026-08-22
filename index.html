@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>Sloth Mode — the lazy workout game</title>
+<meta name="description" content="A lazy workout game. Pick a body part, prop your phone up, and let the camera count your reps by watching your feet." />
+<meta name="theme-color" content="#0B0A14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Sloth Mode" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="assets/icon.svg" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="app">
+  <header class="topbar" id="topbar">
+    <button class="topbar-back" id="backBtn" aria-label="Back" hidden>‹</button>
+    <div class="topbar-brand">
+      <span class="brand-mark">🦥</span>
+      <span class="brand-name">SLOTH<span>MODE</span></span>
+    </div>
+    <div class="topbar-stats">
+      <div class="chip chip-streak" id="streakChip" title="Day streak">🔥 <b>0</b></div>
+      <div class="chip chip-level" id="levelChip" title="Level">Lv <b>1</b></div>
+    </div>
+  </header>
+
+  <main id="screen" class="screen" tabindex="-1"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab is-active" data-route="home"><span>🏠</span>Train</button>
+    <button class="tab" data-route="stats"><span>📈</span>Progress</button>
+    <button class="tab" data-route="settings"><span>⚙️</span>Settings</button>
+  </nav>
+</div>
+
+<!-- Full screen AR session -->
+<section id="session" class="session" hidden aria-hidden="true">
+  <video id="video" class="session-video" playsinline muted autoplay></video>
+  <canvas id="overlay" class="session-overlay"></canvas>
+
+  <div class="session-ui">
+    <div class="session-top">
+      <button class="icon-btn" id="quitBtn" aria-label="Quit workout">✕</button>
+      <div class="session-title">
+        <div class="session-move" id="sessionMove">—</div>
+        <div class="session-step" id="sessionStep">Move 1 of 1</div>
+      </div>
+      <button class="icon-btn" id="flipBtn" aria-label="Switch camera">🔄</button>
+    </div>
+
+    <div class="session-scorebar">
+      <div class="score-chip">SCORE <b id="scoreValue">0</b></div>
+      <div class="score-pop" id="scorePop" hidden></div>
+    </div>
+
+    <div class="session-coach" id="coach" hidden></div>
+
+    <div class="session-center" id="sessionCenter">
+      <div class="countdown" id="countdown" hidden></div>
+    </div>
+
+    <div class="session-bottom">
+      <div class="rep-block">
+        <div class="rep-count"><span id="repCount">0</span><small id="repTarget">/ 0</small></div>
+        <div class="rep-bar"><i id="repBar"></i></div>
+        <div class="rep-cue" id="repCue">Get in frame</div>
+      </div>
+      <div class="session-actions">
+        <button class="pill-btn" id="pauseBtn">Pause</button>
+        <button class="pill-btn pill-ghost" id="manualBtn" title="Count a rep by hand">+1</button>
+        <button class="pill-btn pill-ghost" id="skipBtn">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="session-rest" id="restPanel" hidden>
+    <div class="rest-card">
+      <div class="rest-label">Rest</div>
+      <div class="rest-timer" id="restTimer">15</div>
+      <div class="rest-next" id="restNext">Next: —</div>
+      <button class="btn btn-primary" id="restSkip">Skip rest</button>
+    </div>
+  </div>
+
+  <div class="session-loading" id="sessionLoading">
+    <div class="loader"></div>
+    <p id="loadingText">Waking up the camera…</p>
+    <button class="btn btn-ghost" id="loadingCancel">Cancel</button>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
