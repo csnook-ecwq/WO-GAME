@@ -196,6 +196,12 @@ export function tierSatisfies(frameTier, required) {
  * Confidence scores did not catch it. Geometry and persistence do.
  */
 export function createPoseGate(opts = {}) {
+  // First-person views look down your own body, so it legitimately runs off the
+  // near edge of the picture. Demanding every joint be comfortably inside the
+  // frame — the first version of this — rejected the player and waved through a
+  // hallucination floating in the middle of the room. Exactly backwards.
+  const nearEdge = opts.nearEdge ?? true;
+  const margin = nearEdge ? 0.12 : 0.02;         // how far outside a joint may sit
   const minScale = opts.minScale ?? 0.12;        // body smaller than this is furniture
   const maxJump = opts.maxJump ?? 0.3;           // of frame, between accepted detections
   const maxScaleRatio = opts.maxScaleRatio ?? 2; // sudden size changes are teleports
@@ -215,11 +221,11 @@ export function createPoseGate(opts = {}) {
     check(frame, tMs, needed = []) {
       if (!frame) { streak = 0; return { ok: false, reason: 'nobody' }; }
 
-      // 1. Joints we care about have to be inside the picture. When the model is
-      //    guessing it pins them just outside the frame.
+      // 1. Joints we care about have to be roughly in the picture. When the model
+      //    is guessing it puts them a long way outside it.
       for (const i of needed) {
         const q = frame.p(i);
-        if (!q || q.x < -0.02 || q.x > 1.02 || q.y < -0.02 || q.y > 1.02) {
+        if (!q || q.x < -margin || q.x > 1 + margin || q.y < -margin || q.y > 1 + margin) {
           streak = 0;
           return { ok: false, reason: 'offscreen' };
         }
@@ -257,6 +263,180 @@ export function createPoseGate(opts = {}) {
       anchor = here;
       streak = 0;
       return { ok: true };
+    },
+  };
+}
+
+/* -------------------------------------------------------------- body picker */
+
+/**
+ * Which of the detected bodies is the player?
+ *
+ * The gate above can only say no, and that turned out not to be enough. When the
+ * model found a person-shaped thing in a chair, that detection was stable, large
+ * and comfortably inside the frame — it passed every plausibility test — and it
+ * was the only candidate on offer, so refusing it just left the player with an
+ * empty screen. The fix is to ask for more than one body and choose.
+ *
+ * The deciding signal is **articulation**: how much a body changes shape, having
+ * divided out where it is and how big it is. A hand-held camera pans and shakes,
+ * which moves every candidate on screen together, so raw movement proves nothing.
+ * Real legs bend. Furniture does not. That is why the framing card asks for a
+ * wiggle: it is a challenge the room cannot answer.
+ */
+export function createBodyPicker(opts = {}) {
+  const matchDist = opts.matchDist ?? 0.2;      // frame widths between sightings
+  const memory = opts.memory ?? 0.85;           // how long articulation is remembered
+  const sizeMemory = opts.sizeMemory ?? 0.96;   // body size settles slowly, on purpose
+  const wiggleMin = opts.wiggleMin ?? 0.02;     // accumulated shape change that is life
+  const tapRadius = opts.tapRadius ?? 0.28;
+  const keepRadius = opts.keepRadius ?? 0.25;
+  const forgetMs = opts.forgetMs ?? 900;
+  const minScore = opts.minScore ?? 0.55;
+  const W = { alive: 2.4, edge: 0.9, size: 0.8, tap: 3, keep: 1.4, ...(opts.weights || {}) };
+
+  let tracks = [];
+  let chosen = null;   // { x, y, scale } of the body we last handed back
+  let lastT = 0;
+
+  /** Landmark spread, as a stand-in for body scale when there is no frame yet. */
+  function measure(lm, points) {
+    const pts = points.map((i) => lm[i]).filter(Boolean);
+    if (!pts.length) return null;
+    let x = 0, y = 0;
+    for (const p of pts) { x += p.x; y += p.y; }
+    x /= pts.length; y /= pts.length;
+    let spread = 0;
+    for (const p of pts) spread = Math.max(spread, Math.hypot(p.x - x, p.y - y));
+    // Every landmark, for how far down the picture the body reaches.
+    let low = 0;
+    for (const p of lm) if (p && p.y > low) low = p.y;
+    return { x, y, scale: Math.max(spread, 0.02), low };
+  }
+
+  /** Landmark offsets from the body's own centre, divided by a settled size. */
+  function shapeOf(lm, points, at, size) {
+    const s = Math.max(size || at.scale, 0.02);
+    return points.map((i) => {
+      const p = lm[i];
+      if (!p) return null;
+      return { x: (p.x - at.x) / s, y: (p.y - at.y) / s };
+    });
+  }
+
+  function flexBetween(a, b) {
+    if (!a || !b) return 0;
+    let sum = 0, n = 0;
+    for (let i = 0; i < Math.min(a.length, b.length); i++) {
+      if (!a[i] || !b[i]) continue;
+      sum += Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+      n++;
+    }
+    return n ? sum / n : 0;
+  }
+
+  return {
+    get locked() { return !!chosen; },
+    reset() { tracks = []; chosen = null; lastT = 0; },
+    /** Forget where the player was, but keep watching who is moving. */
+    unlock() { chosen = null; },
+
+    /**
+     * @param {Array<Array>} candidates one landmark array per detected body
+     * @param {number} tMs
+     * @param {object} ctx
+     * @param {number[]} ctx.points  the joints this move cares about
+     * @param {boolean} ctx.nearEdge  true when the player's body legitimately
+     *   runs off the bottom of the picture — any first-person view
+     * @param {{x:number,y:number}|null} ctx.tap  where the player just tapped
+     * @param {boolean} ctx.requireAlive  demand a wiggle before locking on
+     * @returns {{index: number, score: number, parts: object, scores: number[]}}
+     */
+    update(candidates, tMs, ctx = {}) {
+      const points = ctx.points?.length ? ctx.points : [LM.L_KNEE, LM.R_KNEE, LM.L_ANKLE, LM.R_ANKLE];
+      const gap = lastT ? tMs - lastT : 0;
+      lastT = tMs;
+      if (gap > forgetMs) { tracks = []; chosen = null; }
+
+      const seen = (candidates || []).map((lm) => {
+        if (!lm || !lm.length) return null;
+        const at = measure(lm, points);
+        return at ? { at, lm } : null;
+      });
+
+      // Follow each body from the last frame to this one, nearest first, so a
+      // candidate keeps its history when the model reorders its output.
+      const next = [];
+      for (const s of seen) {
+        if (!s) { next.push(null); continue; }
+        let best = null, bestD = matchDist;
+        for (const t of tracks) {
+          if (t.taken) continue;
+          const d = Math.hypot(t.x - s.at.x, t.y - s.at.y);
+          if (d < bestD) { bestD = d; best = t; }
+        }
+        if (best) {
+          best.taken = true;
+          // Normalise by a size that settles slowly rather than this frame's
+          // spread. Flutter kicks change a body's width symmetrically, so
+          // dividing by the current spread would cancel the very movement we
+          // are looking for.
+          const size = best.size * sizeMemory + s.at.scale * (1 - sizeMemory);
+          const shape = shapeOf(s.lm, points, s.at, size);
+          // Accumulate rather than average: a wiggle is a stream of small
+          // changes, and an average of small numbers is a small number.
+          next.push({
+            x: s.at.x, y: s.at.y, scale: s.at.scale, low: s.at.low, shape, size,
+            flex: best.flex * memory + flexBetween(best.shape, shape),
+          });
+        } else {
+          next.push({
+            x: s.at.x, y: s.at.y, scale: s.at.scale, low: s.at.low, size: s.at.scale,
+            shape: shapeOf(s.lm, points, s.at, s.at.scale), flex: 0,
+          });
+        }
+      }
+      tracks = next.filter(Boolean);
+
+      // Score every candidate on what we know that the model does not. Life is
+      // judged against the liveliest body on offer as well as against a fixed
+      // floor, so the choice between two candidates does not hinge on a
+      // threshold tuned in a different room to yours.
+      const liveliest = Math.max(wiggleMin, ...next.map((t) => t?.flex || 0));
+      const parts = [];
+      const scores = next.map((t) => {
+        if (!t) { parts.push(null); return -1; }
+        const alive = Math.min(t.flex / wiggleMin, 1.4) * 0.6 + (t.flex / liveliest) * 0.4;
+        // Your own body runs off the near edge of a first-person picture. A
+        // hallucination floats in the middle of the room.
+        const edge = ctx.nearEdge ? Math.min(Math.max((t.low - 0.72) / 0.2, 0), 1) : 1;
+        const size = Math.min(t.scale / 0.16, 1);
+        const tap = ctx.tap
+          ? Math.max(1 - Math.hypot(ctx.tap.x - t.x, ctx.tap.y - t.y) / tapRadius, 0)
+          : 0;
+        const keep = chosen
+          ? Math.max(1 - Math.hypot(chosen.x - t.x, chosen.y - t.y) / keepRadius, 0)
+          : 0;
+        const p = { alive, edge, size, tap, keep };
+        parts.push(p);
+        return W.alive * alive + W.edge * edge + W.size * size + W.tap * tap + W.keep * keep;
+      });
+
+      let index = -1, score = -1;
+      for (let i = 0; i < scores.length; i++) if (scores[i] > score) { score = scores[i]; index = i; }
+
+      const pick = index >= 0 ? next[index] : null;
+      // Before lock-on we insist on seeing life. Once locked, holding still
+      // between reps must not throw the player away — continuity carries it.
+      const alive = parts[index]?.alive >= 1;
+      const tapped = parts[index]?.tap > 0;
+      const held = parts[index]?.keep > 0;
+      const proven = alive || tapped || held || !ctx.requireAlive;
+      if (!pick || score < minScore || !proven) {
+        return { index: -1, score, parts: parts[index] || null, scores, reason: !pick ? 'nobody' : !proven ? 'still' : 'weak' };
+      }
+      chosen = { x: pick.x, y: pick.y, scale: pick.scale };
+      return { index, score, parts: parts[index], scores };
     },
   };
 }
@@ -576,7 +756,9 @@ export function createExerciseTracker(exercise) {
   const needs = exercise.needs || [];
   const minVis = exercise.minVisibility ?? 0.45;
   const required = tierFor(exercise.signal);
-  const gate = createPoseGate(exercise.gate);
+  // A propped phone sees your whole body with room to spare, so anything hanging
+  // off the edge there is suspect. Held in your hands, it is just your legs.
+  const gate = createPoseGate({ nearEdge: exercise.view !== 'propped', ...exercise.gate });
 
   // Captured during the countdown and held for the rest of the set.
   let headWard = null;

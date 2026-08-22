@@ -545,6 +545,15 @@ input { font: inherit; color: inherit; }
 }
 .framing-chip.ok { background: rgba(123, 216, 200, 0.28); color: #1F7A68; }
 .framing-hint { font-size: 13px; color: var(--ink-soft); margin-bottom: 12px; min-height: 18px; }
+.framing-tap {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: -6px 0 12px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.5);
+}
+.framing-tap[hidden] { display: none; }
 
 /* --------------------------------------------------------------- results */
 

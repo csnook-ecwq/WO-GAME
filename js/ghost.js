@@ -411,10 +411,13 @@ export function createGhostRenderer(canvas) {
         bloomCtx.clearRect(0, 0, bloom.width, bloom.height);
         bloomCtx.drawImage(shape, 0, 0, bloom.width, bloom.height);
 
+        // `dim` marks a body we do not think is the player: visible enough to be
+        // seen and tapped on the framing screen, faint enough to read as "not you".
+        const dim = style.dim ?? 1;
         ctx.save();
-        ctx.globalAlpha = showCamera ? 0.6 : 0.5;
+        ctx.globalAlpha = (showCamera ? 0.6 : 0.5) * dim;
         ctx.drawImage(bloom, -w * 0.02, -h * 0.02, w * 1.04, h * 1.04);
-        ctx.globalAlpha = quality === 'outline' ? 0.4 : (showCamera ? 0.92 : 0.88);
+        ctx.globalAlpha = (quality === 'outline' ? 0.4 : (showCamera ? 0.92 : 0.88)) * dim;
         ctx.drawImage(shape, 0, 0, w, h);
         ctx.restore();
 

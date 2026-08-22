@@ -73,7 +73,10 @@ export async function getLandmarker({ model = 'full', segmentation = true, playe
     const options = (delegate) => ({
       baseOptions: { modelAssetPath: MODELS[model] || MODELS.lite, delegate },
       runningMode: 'VIDEO',
-      numPoses: Math.max(1, Math.min(4, players)),
+      // One more body than there are players, so there is something to choose
+      // between. Asking for exactly one means the model's own favourite is the
+      // only option, and its favourite was a chair.
+      numPoses: Math.max(2, Math.min(5, players + 1)),
       outputSegmentationMasks: segmentation,
       // Raised from 0.5: at 0.5 the model confidently returned a whole person
       // assembled out of a chair and a table leg. Being told "no one is here" is
@@ -325,21 +328,31 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
         advanceProbe(scoreLandmarks(raw?.[0] || null));
         lastPeople = [];
       } else {
-        lastPeople = (raw || []).map((lm, i) => ({
-          // Only the first person is smoothed; extra bodies are drawn as-is.
-          landmarks: i === 0
-            ? smooth(lm.map((p) => mapFromRotated(p, deg))).map((p) => ({ ...p }))
-            : lm.map((p) => mapFromRotated(p, deg)),
+        const upright = (raw || []).map((lm) => lm.map((p) => mapFromRotated(p, deg)));
+        // Which of these is the player? The consumer knows things we do not —
+        // where they tapped, which body has been moving — so it decides, and we
+        // smooth whichever one it picked. Smoothing the model's first output
+        // regardless would drag the filter between two different bodies.
+        const mine = opts.choose ? opts.choose(upright, now) : (upright.length ? 0 : -1);
+        lastPeople = upright.map((lm, i) => ({
+          landmarks: i === mine ? smooth(lm).map((p) => ({ ...p })) : lm,
           mask: masks?.[i] || null,
           maskRotation: deg,
+          isPlayer: i === mine,
         }));
+        if (mine < 0) smooth(null);
+        // Hand the chosen body back first, so everything downstream that reaches
+        // for "the person" gets the right one.
+        if (mine > 0) lastPeople.unshift(...lastPeople.splice(mine, 1));
         // If everyone disappears for a while, the phone was probably moved or we
         // rolled onto our side: go looking for the right rotation again.
         if (!lastPeople.length) smooth(null);
         lostDetections = lastPeople.length ? 0 : lostDetections + 1;
         if (lostDetections >= LOST_BEFORE_REPROBE) startProbe();
       }
-      lastLandmarks = lastPeople[0]?.landmarks || null;
+      // Only the body identified as the player drives tracking. The others stay
+      // in `people` so the framing screen can show them and be corrected.
+      lastLandmarks = lastPeople[0]?.isPlayer ? lastPeople[0].landmarks : null;
     }
     onFrame(lastLandmarks, now, { probing, rotation, people: lastPeople, inferenceMs: inferMs });
   };

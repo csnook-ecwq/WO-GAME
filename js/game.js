@@ -13,13 +13,16 @@
  */
 
 import { EXERCISE_BY_ID, VIEWS, repPoints, POINTS_PER_XP } from './exercises.js';
-import { createExerciseTracker, framingReport, LM } from './detectors.js';
+import { createExerciseTracker, framingReport, createBodyPicker, TIER_JOINTS, tierFor, LM } from './detectors.js';
 import { getLandmarker, startCamera, stopCamera, createPoseLoop } from './pose.js';
 import { createGhostRenderer, SKINS } from './ghost.js';
 import * as store from './store.js';
 import { sfx, say, stopSpeaking, burst, drawParticles, clearParticles, vibrate, unlockAudio } from './fx.js';
 
 const el = (id) => document.getElementById(id);
+
+/** How a body that is probably not you is drawn on the framing screen. */
+const GHOST_OTHER = { color: '#9AA3B2', skin: 'glow', dim: 0.45 };
 
 /** Combo multiplier tiers — generous, because losing a streak should sting mildly. */
 export function comboMultiplier(combo) {
@@ -152,6 +155,11 @@ const S = {
   style: { color: '#FF8FB1', skin: 'glow' },
   paused: false,
   resolveMove: null,
+  picker: createBodyPicker(),
+  tap: null,            // where you last tapped to say "this one is me"
+  tapUntil: 0,
+  candidates: 0,        // bodies the model offered this frame
+  pickReason: '',
 };
 
 function cacheUi() {
@@ -180,6 +188,7 @@ function cacheUi() {
     framingHint: el('framingHint'),
     framingList: el('framingList'),
     framingSkip: el('framingSkip'),
+    framingTap: el('framingTap'),
     rest: el('gameRest'),
     restTimer: el('gameRestTimer'),
     restNext: el('gameRestNext'),
@@ -302,6 +311,66 @@ function countRep(frame, fromOrb) {
   if (S.reps >= S.target) finishMove('done');
 }
 
+/**
+ * Of the bodies the model found, which one is the player?
+ *
+ * Called by the pose loop before anything is smoothed or drawn. Everything the
+ * game shows follows from this answer, so it is worth getting right: the whole
+ * chair-wearing-your-aura problem was this decision being made by whichever
+ * detection the model happened to feel most confident about.
+ */
+function chooseBody(candidates, tMs) {
+  S.candidates = candidates.length;
+  if (!candidates.length) { S.pickReason = 'nobody'; return -1; }
+
+  const view = S.exercise?.view || 'handheld';
+  const tier = S.exercise ? tierFor(S.exercise.signal) : null;
+  const points = (TIER_JOINTS[tier] || []).flatMap((g) => g.points);
+  const tap = S.tap && tMs < S.tapUntil ? S.tap : null;
+
+  const out = S.picker.update(candidates, tMs, {
+    points,
+    // In a first-person view you are looking down your own body, so it runs off
+    // the near edge of the picture. A body floating clear of every edge, in the
+    // middle of the room, is furniture.
+    nearEdge: view !== 'propped',
+    tap,
+    // Insist on signs of life until we have settled on someone — but not
+    // forever. If the wiggle never registers, taking the best guess and letting
+    // her tap to correct it beats a screen that waits and never starts.
+    requireAlive: (S.phase === 'framing' || S.phase === 'countdown') && !S.pickImpatient,
+  });
+  S.pickReason = out.index < 0 ? (out.reason || 'weak') : '';
+  return out.index;
+}
+
+/**
+ * A tap on the screen, in landmark coordinates.
+ *
+ * The camera picture is drawn `object-fit: cover`, so on most phones some of it
+ * is off the sides or the top and bottom. Skipping this and treating a tap as
+ * "fraction across the screen" puts the tap somewhere else entirely on any phone
+ * whose screen is a different shape to its camera — which is all of them.
+ */
+export function screenToLandmark(x, y, rect, canvasW, canvasH) {
+  if (!rect || !(rect.w > 0) || !(rect.h > 0)) return { x, y };
+  return { x: (x * canvasW - rect.x) / rect.w, y: (y * canvasH - rect.y) / rect.h };
+}
+
+/** "That glowing thing is not me" — tap yourself and we switch to that body. */
+function onStageTap(ev) {
+  if (S.phase !== 'framing' && S.phase !== 'active' && S.phase !== 'countdown') return;
+  const box = ui.canvas.getBoundingClientRect();
+  const touch = ev.changedTouches?.[0] || ev;
+  const x = (touch.clientX - box.left) / box.width;
+  const y = (touch.clientY - box.top) / box.height;
+  if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return;
+  S.tap = screenToLandmark(x, y, S.rect, ui.canvas.width, ui.canvas.height);
+  S.tapUntil = performance.now() + 4000;
+  S.picker.unlock();
+  vibrate(8);
+}
+
 function onFrame(landmarks, tMs, meta) {
   S.probing = !!meta?.probing;
   const calibrating = S.phase === 'countdown' || S.phase === 'framing';
@@ -317,24 +386,36 @@ function onFrame(landmarks, tMs, meta) {
     if (res.frame && res.tracking) S.lastFrame = res.frame;
   }
 
-  // Only ever draw a body the tracker actually accepted. Drawing whatever the
+  // Only ever wear the aura on a body the tracker accepted. Drawing whatever the
   // model returned is how a hallucinated person standing by a chair ended up
   // wearing the player's aura.
-  const accepted = res?.tracking && people.length ? [people[0]] : [];
+  const mine = people.find((p) => p.isPlayer);
+  const accepted = res?.tracking && mine ? [mine] : [];
 
-  const { project } = ghost.render({
+  // While framing, show the also-rans in grey as well. Seeing what the camera
+  // has fixed on is the whole point of the screen, and you cannot tap the right
+  // body if the wrong one is invisible.
+  const others = S.phase === 'framing' ? people.filter((p) => p !== mine) : [];
+  const drawn = [...accepted, ...others];
+  const styles = [S.style, ...others.map(() => GHOST_OTHER)];
+
+  const { project, rect } = ghost.render({
     video: ui.video,
-    people: accepted,
-    styles: [S.style],
+    people: drawn,
+    styles: accepted.length ? styles : others.map(() => GHOST_OTHER),
     showCamera: S.showCamera || S.phase === 'framing',
     time: tMs,
     view,
   });
+  S.rect = rect;
 
   paintStats(tMs, meta, res);
 
   if (S.phase === 'framing') {
-    paintFraming(landmarks, res);
+    // The checklist answers "can the camera see my knees", which is true whether
+    // or not we have settled on which body is yours. Ticking it off the locked
+    // body only would leave every box empty while you were plainly in shot.
+    paintFraming(landmarks || people[0]?.landmarks || null, res);
     drawParticles(ui.canvas.getContext('2d'), tMs);
     return;
   }
@@ -421,6 +502,7 @@ function paintStats(tMs, meta, res) {
     `fps ${fps}   infer ${Math.round(meta?.inferenceMs || 0)}ms`,
     `draw ${Math.round(ghost.drawMs)}ms   ghost ${ghost.quality}`,
     `pose ${verdict}   tier ${S.tier || '—'}`,
+    `bodies ${S.candidates}   pick ${S.pickReason || 'ok'}`,
     `rot ${meta?.rotation ?? 0}°   orbs ${S.orbs.filter((o) => !o.hit).length}`,
   ].join('\n');
 }
@@ -552,14 +634,20 @@ function paintFraming(landmarks, res) {
     `).join('');
   }
 
-  const hint = !landmarks ? 'Point the camera at yourself'
-    : !allOk ? `Move the phone until every part below is ticked`
+  // The wiggle is not a flourish: a body that changes shape is the one thing a
+  // chair cannot fake, and it is how we tell which detection is you.
+  const hint = S.pickReason === 'still' ? 'Wiggle your feet so I can find you'
+    : S.candidates > 1 && !landmarks ? 'Tap yourself to say which one is you'
+    : !landmarks ? 'Point the camera at yourself'
+    : !allOk ? 'Move the phone until every part below is ticked'
     : res?.tracking ? 'Got you — hold still'
     : res?.reason === 'settling' ? 'Got you — hold still'
     : res?.reason === 'jumped' ? 'Hold the phone steady for a moment'
     : res?.reason === 'tiny' ? 'Come a bit closer, or bring the phone nearer'
     : res?.reason === 'offscreen' ? 'Some of you is outside the picture'
     : 'Almost — keep still';
+  const wrong = landmarks && S.candidates > 1;
+  if (ui.framingTap.hidden === wrong) ui.framingTap.hidden = !wrong;
   if (ui.framingHint.textContent !== hint) ui.framingHint.textContent = hint;
 
   // Ready means the parts are visible AND the tracker trusts the detection.
@@ -576,10 +664,15 @@ async function runFraming(ctl) {
   ui.framingSetup.textContent = VIEWS[S.exercise.view]?.hint || '';
   setCoach('');
 
-  const giveUpAt = Date.now() + 25000;
+  S.pickImpatient = false;
+  const settleFor = Date.now() + 7000;
+  const giveUpAt = Date.now() + 20000;
   while (!ctl.quit && !ctl.skip && cameraOk) {
     // Held steady and complete for most of a second: good enough, get going.
     if (S.framingReadySince && performance.now() - S.framingReadySince > 700) break;
+    // Waited long enough for a wiggle. Take the likeliest body instead of
+    // standing here; the tap hint stays on screen to fix a wrong guess.
+    if (!S.pickImpatient && Date.now() > settleFor) S.pickImpatient = true;
     if (Date.now() > giveUpAt) break;
     await sleep(120);
   }
@@ -657,7 +750,7 @@ async function setupCamera(facing, players) {
   stream = await startCamera(ui.video, { facing });
   ui.loadingText.textContent = 'Loading the body tracker (first time only)…';
   const model = await getLandmarker({ segmentation: true, players });
-  poseLoop = createPoseLoop(ui.video, model, onFrame);
+  poseLoop = createPoseLoop(ui.video, model, onFrame, { choose: chooseBody });
   poseLoop.start();
   cameraOk = true;
   ui.loading.hidden = true;
@@ -769,7 +862,14 @@ function startDemoLoop() {
     raf = requestAnimationFrame(tick);
     const t = performance.now();
     const lm = demoBody(t, S.exercise);
-    onFrame(lm, t, { probing: false, rotation: 0, people: [{ landmarks: lm, mask: demoMask(lm), maskRotation: 0 }] });
+    // The synthetic body goes through the same choice the real one does, so the
+    // demo exercises the picker rather than routing around it.
+    const chosen = chooseBody([lm], t) === 0;
+    onFrame(chosen ? lm : null, t, {
+      probing: false,
+      rotation: 0,
+      people: [{ landmarks: lm, mask: demoMask(lm), maskRotation: 0, isPlayer: chosen }],
+    });
   };
   raf = requestAnimationFrame(tick);
   return { start() { running = true; tick(); }, stop() { running = false; cancelAnimationFrame(raf); }, probeOrientation() {} };
@@ -822,6 +922,10 @@ export async function playLevel(level, { style } = {}) {
     else if (S.phase === 'countdown' || S.phase === 'framing') { ctl.skip = true; wakeSleepers(); }
   };
   ui.framingSkip.onclick = () => { ctl.skip = true; wakeSleepers(); };
+  // Listening on the section rather than the canvas: the HUD sits on top of the
+  // canvas, and a tap that lands on empty HUD still means "I am over here".
+  // Assigned, not added, because this runs again for every level.
+  ui.root.onpointerdown = onStageTap;
   ui.pause.onclick = () => {
     S.paused = !S.paused;
     ui.pause.textContent = S.paused ? 'Resume' : 'Pause';
@@ -862,6 +966,10 @@ export async function playLevel(level, { style } = {}) {
     S.lastTracking = false;
     S.basePoints = repPoints(ex.id, level.xpMultiplier || 1);
     S.tracker = cameraOk ? createExerciseTracker(ex) : null;
+    // Each move re-frames the shot, so who is who is decided again from scratch.
+    S.picker.reset();
+    S.tap = null;
+    S.pickReason = '';
 
     ui.move.textContent = `${ex.emoji} ${ex.name}`;
     ui.step.textContent = `${i + 1} of ${level.moves.length}`;

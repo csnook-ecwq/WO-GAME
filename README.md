@@ -97,11 +97,22 @@ There is no "AI trainer" guessing at video. It is geometry, and it is inspectabl
    orb is missed but the rep was real, it still counts.
 7. **Nothing is trusted until it is plausible.** Pose models will happily find a
    person in a chair. Every detection has to clear a gate before it is drawn or
-   scored: required joints inside the frame rather than pinned to its edge, a
-   body big enough to be a body, no teleporting between frames, and a few
-   consecutive good frames before lock-on. A detection that fails is drawn as
-   nothing at all and counts nothing — an empty frame with a prompt beats a blob
-   pretending to be you.
+   scored: a body big enough to be a body, no teleporting between frames, and a
+   few consecutive good frames before lock-on. Joints may run off the *near*
+   edge of the picture, because in a first-person view your own legs do exactly
+   that — but a propped phone, which sees you whole, is held to the stricter
+   rule. A detection that fails is drawn as nothing at all and counts nothing.
+8. **Which body is you is a decision, not a default.** Refusing a bad detection
+   is not enough when the bad one is the only one on offer, so the app asks the
+   model for more bodies than there are players and chooses between them. The
+   deciding signal is **articulation**: how much a body changes shape once you
+   divide out where it is and how big it is. A hand-held camera pans and shakes,
+   moving everything on screen together, so raw movement proves nothing. Real
+   legs bend; furniture does not. That is why the framing card asks you to
+   wiggle your feet — it is a challenge the room cannot answer. Size and
+   near-edge contact break the ties, and continuity carries you through the
+   still moments between reps. If it still picks wrong, **tap yourself** and it
+   switches, during framing or mid-game.
 
 ## Where your progress lives
 
@@ -118,9 +129,13 @@ does not take your progress with it.
 **You → Tracking numbers** puts a small line on the play screen: fps,
 inference and draw cost in ms, whether the ghost is running from the segmentation
 mask, whether the current detection was **accepted or rejected**, which reference
-frame tier is in use, the rotation it settled on, and the live orb count. Off by
-default. It exists so "it's laggy" can be answered by one screenshot instead of a
-code read.
+frame tier is in use, **how many bodies the model offered and why one was or was
+not chosen**, the rotation it settled on, and the live orb count. Off by default.
+It exists so "it's laggy" can be answered by one screenshot instead of a code
+read.
+
+`pick still` means nothing in shot has moved enough to be a person yet — wiggle,
+or tap yourself. `bodies 2` means it had a choice to make.
 
 ## Privacy
 
@@ -158,6 +173,11 @@ tests/                unit tests (node --test)
   body in a dim room; too loose and the furniture comes back. If it misjudges in
   your room, the stats line says which way — `pose rejected` while you are plainly
   in frame means too strict.
+- **Asking for a second body costs a little speed** when there genuinely is one
+  to find, since the model runs its landmark pass again. With one person in shot
+  it costs nothing. The framing screen waits about seven seconds for a wiggle
+  before giving up and taking its best guess, so it can be wrong, but it can
+  never leave you staring at a screen that will not start.
 - **Face-down is the least reliable view** — your own torso hides part of your
   legs from the lens.
 - Segmentation costs frames. The renderer measures itself and steps down to an

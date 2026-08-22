@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   LM, SIGNALS, buildFrame, angleAt, distanceToLine, visibilityOf,
   createRepCounter, createExerciseTracker, TIER, tierFor, tierSatisfies,
-  createPoseGate, framingReport,
+  createPoseGate, framingReport, createBodyPicker,
 } from '../js/detectors.js';
 import {
   EXERCISES, ROUTINES, EXERCISE_BY_ID, POSITIONS, VIEWS,
@@ -12,8 +12,9 @@ import {
 } from '../js/exercises.js';
 import { rankFor, streak, LEVEL_TITLES } from '../js/store.js';
 import { mapFromRotated, ROTATIONS } from '../js/pose.js';
+import { coverRect, projectWith } from '../js/ghost.js';
 import { LEVELS, WORLDS, levelView, levelReps, isUnlocked, nextLevel } from '../js/levels.js';
-import { comboMultiplier, starsFor, isHit, targetFor, orbCoords, liftSide } from '../js/game.js';
+import { comboMultiplier, starsFor, isHit, targetFor, orbCoords, liftSide, screenToLandmark } from '../js/game.js';
 
 /* ------------------------------------------------------------ fake bodies */
 
@@ -779,4 +780,172 @@ test('anchored orbs stay put while the joint they follow moves', () => {
     liftedHipGap < restingHipGap,
     `lifting the hips must close the gap to the orb (${restingHipGap} → ${liftedHipGap})`
   );
+});
+
+/* ------------------------------------------------------- picking the player */
+
+const FEET_POINTS = [LM.L_KNEE, LM.R_KNEE, LM.L_ANKLE, LM.R_ANKLE, LM.L_FOOT, LM.R_FOOT];
+
+/** Feet wiggling in place: the ankles flex, the body stays where it is. */
+function wiggle(i, opts = {}) {
+  const d = i % 2 ? 0.03 : -0.03;
+  return moveBody(body({
+    [LM.L_FOOT]: [0.47 + d, 0.93 + d], [LM.R_FOOT]: [0.53 + d, 0.93 - d],
+    [LM.L_ANKLE]: [0.45, 0.90 + d], [LM.R_ANKLE]: [0.55, 0.90 - d],
+  }), opts);
+}
+
+test('the body that moves wins over the one that does not', () => {
+  // The failure this exists for: the model found a person-shaped thing in a
+  // chair and it beat the player's own legs, because it looked more like a
+  // whole person. Furniture cannot wiggle.
+  const picker = createBodyPicker();
+  const furniture = moveBody(body(), { dx: 0.3, dy: -0.35, scale: 0.8 });
+  let out;
+  for (let i = 0; i < 12; i++) {
+    // Candidate order deliberately puts the still body first, where the model
+    // put it: this must not be decided by the order the model hands them over.
+    out = picker.update([furniture, wiggle(i)], i * 33, {
+      points: FEET_POINTS, nearEdge: true, requireAlive: true,
+    });
+  }
+  assert.equal(out.index, 1, 'picked the motionless body');
+});
+
+test('a hand-held camera panning over furniture is not mistaken for life', () => {
+  // Everything on screen moves when the phone moves, so raw movement proves
+  // nothing. Only a change of shape counts.
+  const picker = createBodyPicker();
+  let out;
+  for (let i = 0; i < 12; i++) {
+    const pan = { dx: i * 0.012, dy: i * 0.008 };
+    out = picker.update([moveBody(body(), pan)], i * 33, {
+      points: FEET_POINTS, nearEdge: true, requireAlive: true,
+    });
+  }
+  assert.equal(out.index, -1, 'a panning camera made still furniture look alive');
+  assert.equal(out.reason, 'still');
+});
+
+test('tapping yourself overrides everything', () => {
+  const picker = createBodyPicker();
+  const mine = moveBody(body(), { dx: -0.25 });      // off to one side, still
+  const decoy = wiggle(1, { dx: 0.25 });
+  let out;
+  for (let i = 0; i < 10; i++) {
+    out = picker.update([moveBody(body(), { dx: -0.25 }), wiggle(i, { dx: 0.25 })], i * 33, {
+      points: FEET_POINTS, nearEdge: true, requireAlive: true,
+      tap: { x: mine[LM.L_ANKLE].x, y: mine[LM.L_ANKLE].y },
+    });
+  }
+  assert.equal(out.index, 0, 'the tap did not win');
+  assert.ok(decoy, 'decoy body built');
+});
+
+test('holding still between reps does not lose you', () => {
+  const picker = createBodyPicker();
+  let t = 0;
+  for (let i = 0; i < 10; i++, t += 33) {
+    picker.update([wiggle(i)], t, { points: FEET_POINTS, nearEdge: true, requireAlive: true });
+  }
+  // Now freeze, the way anyone does between one rep and the next.
+  let out;
+  for (let i = 0; i < 20; i++, t += 33) {
+    out = picker.update([body()], t, { points: FEET_POINTS, nearEdge: true, requireAlive: true });
+  }
+  assert.equal(out.index, 0, 'lost the player for keeping still');
+});
+
+test('a body floating in the middle of a first-person picture loses to one at the near edge', () => {
+  const picker = createBodyPicker({ weights: { alive: 0 } });   // judge on position alone
+  const floating = moveBody(body(), { dy: -0.35 });
+  const mine = body();                                          // legs run off the bottom
+  const out = picker.update([floating, mine], 0, { points: FEET_POINTS, nearEdge: true });
+  assert.ok(out.scores[1] > out.scores[0], 'the floating body scored higher');
+});
+
+test('a hand-held view tolerates legs running off the near edge; a propped one does not', () => {
+  // Pointing the phone down your own body puts your knees at or past the bottom
+  // of the picture. The first version of this check called that implausible and
+  // threw the player away, while a hallucination floating clear of every edge
+  // sailed through.
+  const offEdge = moveBody(body(), { dy: 0.14 });
+  const handheld = createPoseGate({ nearEdge: true });
+  const propped = createPoseGate({ nearEdge: false });
+  const feed = (gate) => {
+    let out;
+    for (let i = 0; i < 5; i++) out = gate.check(buildFrame(offEdge), i * 33, LEGS_NEEDED);
+    return out;
+  };
+  assert.equal(feed(handheld).ok, true, 'hand-held rejected the player');
+  assert.equal(feed(propped).reason, 'offscreen');
+});
+
+test('exercises inherit the right edge rule from their camera setup', () => {
+  const handheld = createExerciseTracker(EXERCISE_BY_ID['flutter-kicks']);
+  const propped = createExerciseTracker(EXERCISE_BY_ID['glute-bridge']);
+  assert.equal(EXERCISE_BY_ID['flutter-kicks'].view, 'handheld');
+  assert.equal(EXERCISE_BY_ID['glute-bridge'].view, 'propped');
+  // Each body is shifted until the joints that move needs sit just past the
+  // bottom of the picture: feet for flutter kicks, hips for a bridge.
+  let held, prop;
+  for (let i = 0; i < 6; i++) {
+    held = handheld.update(moveBody(body(), { dy: 0.15 }), i * 33, true);
+    prop = propped.update(moveBody(body(), { dy: 0.5 }), i * 33, true);
+  }
+  assert.equal(held.tracking, true, 'hand-held move lost a body at the near edge');
+  assert.equal(prop.reason, 'offscreen');
+});
+
+test('a slow, small flutter still reads as alive', () => {
+  // The first cut of this averaged shape-change per frame, and the average of a
+  // stream of small numbers is a small number: a real flutter — a couple of
+  // centimetres over a second and a half — never crossed the threshold and the
+  // framing screen waited forever. Movement has to accumulate.
+  const picker = createBodyPicker();
+  let out;
+  for (let i = 0; i < 60; i++) {
+    const t = i * 33;
+    const a = Math.sin(t / 420) * 0.10;             // the same sweep the demo body uses
+    out = picker.update([body({
+      [LM.L_ANKLE]: [0.44 - a, 0.92], [LM.R_ANKLE]: [0.56 + a, 0.92],
+    })], t, { points: FEET_POINTS, nearEdge: true, requireAlive: true });
+  }
+  assert.equal(out.index, 0, `a real flutter was not recognised as life (${out.reason})`);
+});
+
+test('a body that only grows and shrinks on the spot is not alive', () => {
+  // Someone walking toward a camera in the background, or the model breathing
+  // in and out around a chair, changes size without articulating.
+  const picker = createBodyPicker();
+  let out;
+  for (let i = 0; i < 60; i++) {
+    const t = i * 33;
+    out = picker.update([moveBody(body(), { scale: 1 + Math.sin(t / 500) * 0.08 })], t, {
+      points: FEET_POINTS, nearEdge: true, requireAlive: true,
+    });
+  }
+  assert.equal(out.index, -1, 'a body that merely resized passed as alive');
+});
+
+test('a tap maps back through the cover rectangle to the right body part', () => {
+  // A 9:16 phone screen showing a 16:9 camera: the picture is far wider than the
+  // screen, so most of its width is off the sides. The centre of the screen is
+  // still the centre of the picture...
+  const rect = coverRect(1280, 720, 390, 844);
+  const mid = screenToLandmark(0.5, 0.5, rect, 390, 844);
+  assert.ok(Math.abs(mid.x - 0.5) < 1e-9 && Math.abs(mid.y - 0.5) < 1e-9);
+
+  // ...but a tap near the left edge of the screen is nowhere near the left edge
+  // of the picture. Treating the tap as a plain screen fraction would have said
+  // 0.1, which is a different part of the room.
+  const left = screenToLandmark(0.1, 0.5, rect, 390, 844);
+  assert.ok(left.x > 0.35 && left.x < 0.48, `left tap mapped to ${left.x}`);
+
+  // Whatever the tap, it must land back where the ghost was drawn.
+  const project = projectWith(rect);
+  const joint = { x: 0.42, y: 0.61 };
+  const drawn = project(joint);
+  const back = screenToLandmark(drawn.x / 390, drawn.y / 844, rect, 390, 844);
+  assert.ok(Math.abs(back.x - joint.x) < 1e-9 && Math.abs(back.y - joint.y) < 1e-9);
 });
