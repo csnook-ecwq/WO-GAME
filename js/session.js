@@ -5,7 +5,7 @@
  * an AR overlay, rest between moves, then resolves with what actually happened.
  */
 
-import { EXERCISE_BY_ID, routineReps } from './exercises.js';
+import { EXERCISE_BY_ID, routineReps, repPoints, POSITIONS, POINTS_PER_XP } from './exercises.js';
 import { createExerciseTracker, LM } from './detectors.js';
 import { getLandmarker, startCamera, stopCamera, createPoseLoop, POSE_CONNECTIONS, FOOT_POINTS } from './pose.js';
 import * as store from './store.js';
@@ -29,6 +29,9 @@ const S = {
   lastTracking: false,
   lastReason: '',
   lastSpokeAt: 0,
+  score: 0,
+  points: 20,
+  probing: false,
   resolveMove: null,
   paused: false,
   accent: '#7CFF6B',
@@ -45,6 +48,8 @@ function cacheUi() {
     move: el('sessionMove'),
     step: el('sessionStep'),
     coach: el('coach'),
+    scoreValue: el('scoreValue'),
+    scorePop: el('scorePop'),
     countdown: el('countdown'),
     repCount: el('repCount'),
     repTarget: el('repTarget'),
@@ -188,7 +193,8 @@ function bumpRepCount() {
 
 /* ------------------------------------------------------------- frame loop */
 
-function onFrame(landmarks, tMs) {
+function onFrame(landmarks, tMs, meta) {
+  S.probing = !!meta?.probing;
   const calibrating = S.phase === 'countdown';
   let res = null;
 
@@ -199,11 +205,13 @@ function onFrame(landmarks, tMs) {
     S.progress = res.progress || 0;
 
     if (S.phase === 'active') {
-      if (!res.tracking) {
+      if (S.probing) {
+        setCoach('Working out which way up you are — hold still', true);
+      } else if (!res.tracking) {
         setCoach(
           res.reason === 'nobody'
-            ? 'I cannot see you — step into frame'
-            : 'Get your whole body (and feet) in shot',
+            ? 'I cannot see you — is your whole body in shot?'
+            : 'Move back a little so your legs and feet are in frame',
           true
         );
       } else {
@@ -218,8 +226,21 @@ function onFrame(landmarks, tMs) {
   drawOverlay(landmarks, res);
 }
 
+function showScorePop(points) {
+  const pop = ui.scorePop;
+  pop.textContent = `+${points}`;
+  pop.hidden = true;
+  void pop.offsetWidth;          // restart the float animation
+  pop.hidden = false;
+  clearTimeout(showScorePop.timer);
+  showScorePop.timer = setTimeout(() => { pop.hidden = true; }, 900);
+}
+
 function countRep(landmarks) {
   S.reps += 1;
+  S.score += S.points;
+  ui.scoreValue.textContent = S.score;
+  showScorePop(S.points);
   paintReps();
   bumpRepCount();
   repFlash(landmarks);
@@ -268,16 +289,26 @@ function wakeSleepers() { [...sleepers].forEach((fn) => fn()); }
 async function runCountdown(ctl) {
   S.phase = 'countdown';
   ui.countdown.hidden = false;
+  // Every move can be in a different position (back, side, face down), so work
+  // out which way the body is lying before counting anything.
+  poseLoop?.probeOrientation();
   let n = 3;
   // Wall-clock deadline: on a slow phone each inference can eat hundreds of
   // milliseconds, so counting nominal sleeps would stretch this to half a minute.
   const graceUntil = Date.now() + 8000;
 
   while (n > 0 && !ctl.quit && !ctl.skip) {
-    // Hold until the camera can actually see a body, but never past the grace.
-    if (cameraOk && !S.lastTracking && Date.now() < graceUntil) {
+    // Hold until the camera can actually see a body, but never past the grace —
+    // except while the orientation probe is still running, which is work in
+    // progress rather than a failure to find you.
+    if (cameraOk && !S.lastTracking && (Date.now() < graceUntil || (S.probing && Date.now() < graceUntil + 6000))) {
       ui.countdown.textContent = '·';
-      setCoach(S.lastReason === 'nobody' ? 'Step into frame to start' : 'Show me your feet to start', true);
+      setCoach(
+        S.probing ? 'Finding you…'
+          : S.lastReason === 'nobody' ? 'Lie down where the camera can see you'
+          : 'Shuffle back so your legs are in frame',
+        true
+      );
       await sleep(200);
       continue;
     }
@@ -383,9 +414,12 @@ export async function runSession(routine) {
   S.facing = settings.facing || 'user';
   S.phase = 'idle';
   S.reps = 0;
+  S.score = 0;
   cameraOk = false;
   clearParticles();
 
+  ui.scoreValue.textContent = '0';
+  ui.scorePop.hidden = true;
   ui.root.hidden = false;
   ui.root.setAttribute('aria-hidden', 'false');
   ui.root.classList.toggle('mirrored', S.facing === 'user' && settings.mirror);
@@ -451,8 +485,9 @@ export async function runSession(routine) {
     S.accent = accentFor(routine.area);
     S.tracker = cameraOk ? createExerciseTracker(ex) : null;
 
+    S.points = repPoints(ex.id, routine.xpMultiplier || 1);
     ui.move.textContent = `${ex.emoji} ${ex.name}`;
-    ui.step.textContent = `Move ${i + 1} of ${routine.moves.length}`;
+    ui.step.textContent = `Move ${i + 1} of ${routine.moves.length} · ${POSITIONS[ex.position]?.label || ''}`;
     ui.repCue.textContent = cameraOk ? (ex.tips[0] || ex.cue) : 'Tracking off — tap +1 for each rep';
     paintReps();
 
@@ -474,7 +509,10 @@ export async function runSession(routine) {
     const isLast = i === routine.moves.length - 1;
     if (!isLast) {
       const [nextId] = routine.moves[i + 1];
-      await runRest(outcome === 'done' ? 15 : 8, EXERCISE_BY_ID[nextId]?.name, ctl);
+      const next = EXERCISE_BY_ID[nextId];
+      const rollOver = next && next.position !== ex.position;
+      const label = next ? `${next.name}${rollOver ? ` — roll ${POSITIONS[next.position]?.label.toLowerCase()}` : ''}` : '';
+      await runRest(outcome === 'done' ? 15 : 8, label, ctl);
     }
   }
 
@@ -511,6 +549,7 @@ export async function runSession(routine) {
     reps,
     targetReps,
     xp,
+    score: xp * POINTS_PER_XP,
     seconds: Math.round((Date.now() - startedAt) / 1000),
     perfect,
     perMove,

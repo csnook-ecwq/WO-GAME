@@ -5,9 +5,14 @@
  * (or plain numbers) so it can be unit tested with `npm test`.
  *
  * Landmarks follow the BlazePose 33-point layout used by MediaPipe Pose
- * Landmarker. Image coordinates are normalized 0..1 with y growing DOWNWARD,
- * so "higher off the ground" means a SMALLER y. Every signal below is written
- * so that a bigger number always means "more effort".
+ * Landmarker, normalized 0..1.
+ *
+ * Every exercise in this app is performed lying down, which means the body can
+ * appear at any angle in the frame — head left, head right, feet toward the
+ * camera. So NO signal here uses raw image axes. They are all either joint
+ * angles or projections onto the body's own frame of reference (the spine axis
+ * and its perpendicular), which makes them identical whichever way the phone
+ * is lying. Every signal is written so a bigger number means more effort.
  */
 
 export const LM = {
@@ -48,9 +53,34 @@ export function buildFrame(landmarks) {
   const kneeMid = mid(p(LM.L_KNEE), p(LM.R_KNEE));
   const torso = dist(shoulderMid, hipMid);
   const hipWidth = dist(p(LM.L_HIP), p(LM.R_HIP));
-  // Lying down / seated poses foreshorten the torso, so fall back to hip width.
+  const thigh = dist(hipMid, kneeMid);
+  // A body seen end-on foreshortens the torso, so fall back to hip width.
   const scale = Math.max(torso, hipWidth * 1.3, 0.08);
-  return { lm: landmarks, p, shoulderMid, hipMid, ankleMid, kneeMid, torso, hipWidth, scale };
+  // The spine shortens when you curl up, so any signal measuring the torso
+  // folding must be normalised by something that does not move with it.
+  const rigid = Math.max(thigh, hipWidth * 1.3, 0.05);
+
+  // Body reference frame: `u` runs from the hips toward the head, `n` is
+  // perpendicular to it (the direction the belly or back faces). Measuring in
+  // this frame is what makes every signal rotation-independent.
+  const axisLen = Math.max(torso, 1e-6);
+  const u = { x: (shoulderMid.x - hipMid.x) / axisLen, y: (shoulderMid.y - hipMid.y) / axisLen };
+  const n = { x: -u.y, y: u.x };
+  const along = (q) => ((q.x - hipMid.x) * u.x + (q.y - hipMid.y) * u.y) / scale;
+  const across = (q) => ((q.x - hipMid.x) * n.x + (q.y - hipMid.y) * n.y) / scale;
+
+  return {
+    lm: landmarks, p, shoulderMid, hipMid, ankleMid, kneeMid,
+    torso, hipWidth, thigh, scale, rigid, u, n, along, across,
+  };
+}
+
+/** Perpendicular distance from point q to the line through a and b. */
+export function distanceToLine(q, a, b) {
+  const vx = b.x - a.x, vy = b.y - a.y;
+  const len = Math.hypot(vx, vy);
+  if (len < 1e-6) return dist(q, a);
+  return Math.abs((q.x - a.x) * vy - (q.y - a.y) * vx) / len;
 }
 
 /** Interior angle at point b, in degrees. */
@@ -64,52 +94,75 @@ export function angleAt(a, b, c) {
 }
 
 /**
- * Signal library. Each entry maps a frame to a single scalar.
- * `alternate`-mode signals are signed: positive = left side working,
- * negative = right side working.
+ * Signal library. Each entry maps a frame to a single scalar where bigger means
+ * further into the rep. `alternate`-mode signals are signed: positive means the
+ * left side is working, negative the right.
+ *
+ * These are all angles or body-frame projections, so they read the same whether
+ * you are lying with your head to the left of the frame, to the right, or with
+ * the phone at your feet.
  */
 export const SIGNALS = {
-  /** Which knee is higher (high knees, marching, bicycles). */
-  kneeAlternate: (f) => (f.p(LM.R_KNEE).y - f.p(LM.L_KNEE).y) / f.scale,
-  /** Which foot is higher (toe taps, flutter kicks, leg extensions). */
-  ankleAlternate: (f) => (f.p(LM.R_ANKLE).y - f.p(LM.L_ANKLE).y) / f.scale,
-  /** Highest knee relative to the hips (both-knee drives). */
-  kneeLift: (f) => (f.hipMid.y - Math.min(f.p(LM.L_KNEE).y, f.p(LM.R_KNEE).y)) / f.scale,
-  /** Horizontal gap between the feet (jacks, shuffles). */
-  ankleSpread: (f) => Math.abs(f.p(LM.L_ANKLE).x - f.p(LM.R_ANKLE).x) / f.scale,
-  /** Heel lifted off the floor ahead of the toes (calf raises). */
-  heelLift: (f) =>
-    ((f.p(LM.L_FOOT).y - f.p(LM.L_HEEL).y) + (f.p(LM.R_FOOT).y - f.p(LM.R_HEEL).y)) / 2 / f.scale,
-  /** Hips dropping toward the floor (squats, chair stands). */
-  squatDepth: (f) => -(f.ankleMid.y - f.hipMid.y) / f.scale,
-  /** Hips pushed above the shoulder line (glute bridges, lying down). */
-  hipRaise: (f) => (f.shoulderMid.y - f.hipMid.y) / f.scale,
-  /** Furthest foot swung out sideways from the hip centre (side leg raises). */
-  legAbduct: (f) =>
-    Math.max(
-      Math.abs(f.p(LM.L_ANKLE).x - f.hipMid.x),
-      Math.abs(f.p(LM.R_ANKLE).x - f.hipMid.x)
-    ) / f.scale,
-  /** Heel pulled back toward the glutes (hamstring curls). */
-  heelCurl: (f) =>
-    Math.max(
-      (f.p(LM.L_ANKLE).y - f.p(LM.L_KNEE).y) * -1,
-      (f.p(LM.R_ANKLE).y - f.p(LM.R_KNEE).y) * -1
-    ) / f.scale,
-  /** Hands rising above the shoulders (presses, raises). */
-  wristLift: (f) =>
-    (f.shoulderMid.y - (f.p(LM.L_WRIST).y + f.p(LM.R_WRIST).y) / 2) / f.scale,
-  /** How bent the elbows are, 0 = straight (wall push-ups, couch dips). */
+  /* --- along the spine: toward the head is positive --------------------- */
+
+  /** Which knee is drawn further up toward the chest (bicycles, dead bugs). */
+  kneeAlternate: (f) => f.along(f.p(LM.L_KNEE)) - f.along(f.p(LM.R_KNEE)),
+  /** Which foot is further up the body (alternating extensions, marches). */
+  ankleAlternate: (f) => f.along(f.p(LM.L_ANKLE)) - f.along(f.p(LM.R_ANKLE)),
+  /** How far the hands reach past the head (overhead reaches). */
+  armReach: (f) => (f.along(f.p(LM.L_WRIST)) + f.along(f.p(LM.R_WRIST))) / 2,
+
+  /* --- across the body: off the floor / one side vs the other ----------- */
+
+  /** One foot lifted while the other drops (flutter kicks, scissors). */
+  ankleSplit: (f) => f.across(f.p(LM.L_ANKLE)) - f.across(f.p(LM.R_ANKLE)),
+  /** One knee lifted away from the other (prone leg lifts, side kicks). */
+  kneeSplit: (f) => f.across(f.p(LM.L_KNEE)) - f.across(f.p(LM.R_KNEE)),
+
+  /* --- distances between limbs ----------------------------------------- */
+
+  /** Gap between the feet (lying jacks, side-lying leg lifts). */
+  legSpread: (f) => dist(f.p(LM.L_ANKLE), f.p(LM.R_ANKLE)) / f.scale,
+  /** Gap between the knees (clamshells). */
+  kneeSpread: (f) => dist(f.p(LM.L_KNEE), f.p(LM.R_KNEE)) / f.scale,
+  /** Gap between the hands (snow angels, floor flys). */
+  armSpread: (f) => dist(f.p(LM.L_WRIST), f.p(LM.R_WRIST)) / f.scale,
+
+  /* --- joint angles: identical from any camera angle -------------------- */
+
+  /** Hip folding: knees toward the chest, or legs lowering away from it. */
+  hipTuck: (f) => (180 - angleAt(f.shoulderMid, f.hipMid, f.kneeMid)) / 90,
+  /**
+   * Shoulders curling toward the knees (crunches, sit-backs). Normalised by the
+   * thigh rather than the torso: curling shortens the measured torso, which
+   * would otherwise cancel out the very movement we are trying to detect.
+   */
+  crunch: (f) => -dist(f.shoulderMid, f.kneeMid) / f.rigid,
+  /** Both knees straightening (ceiling presses). */
+  kneeExtend: (f) =>
+    (angleAt(f.p(LM.L_HIP), f.p(LM.L_KNEE), f.p(LM.L_ANKLE)) +
+     angleAt(f.p(LM.R_HIP), f.p(LM.R_KNEE), f.p(LM.R_ANKLE))) / 2 / 180,
+  /** One knee straightening while the other bends (alternating extensions). */
+  kneeExtendAlternate: (f) =>
+    (angleAt(f.p(LM.L_HIP), f.p(LM.L_KNEE), f.p(LM.L_ANKLE)) -
+     angleAt(f.p(LM.R_HIP), f.p(LM.R_KNEE), f.p(LM.R_ANKLE))) / 180,
+  /** Ankles flexing back toward the shins (ankle pumps). */
+  anklePump: (f) =>
+    (angleAt(f.p(LM.L_KNEE), f.p(LM.L_ANKLE), f.p(LM.L_FOOT)) +
+     angleAt(f.p(LM.R_KNEE), f.p(LM.R_ANKLE), f.p(LM.R_FOOT))) / 2 / 180,
+  /** Elbows bending (floor presses, skull crushers). */
   elbowBend: (f) => {
     const l = angleAt(f.p(LM.L_SHOULDER), f.p(LM.L_ELBOW), f.p(LM.L_WRIST));
     const r = angleAt(f.p(LM.R_SHOULDER), f.p(LM.R_ELBOW), f.p(LM.R_WRIST));
     return (180 - (l + r) / 2) / 90;
   },
-  /** Torso curling up off the floor (crunches, sit-backs). */
-  torsoCurl: (f) => {
-    const a = angleAt(f.shoulderMid, f.hipMid, f.kneeMid);
-    return (180 - a) / 90;
-  },
+  /** One arm punching out while the other folds in (ceiling punches). */
+  elbowAlternate: (f) =>
+    (angleAt(f.p(LM.L_SHOULDER), f.p(LM.L_ELBOW), f.p(LM.L_WRIST)) -
+     angleAt(f.p(LM.R_SHOULDER), f.p(LM.R_ELBOW), f.p(LM.R_WRIST))) / 180,
+
+  /** Hips pushed away from the shoulder-to-knee line (glute bridges). */
+  bridge: (f) => distanceToLine(f.hipMid, f.shoulderMid, f.kneeMid) / f.scale,
 };
 
 const median = (xs) => {

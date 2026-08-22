@@ -3,8 +3,8 @@
  */
 
 import {
-  AREAS, AREA_BY_ID, EXERCISE_BY_ID, ROUTINES, ROUTINE_BY_ID,
-  ROUTINES_BY_AREA, routineReps, routineXp, LAZINESS_LABEL,
+  AREAS, AREA_BY_ID, EXERCISE_BY_ID, ROUTINE_BY_ID, ROUTINES_BY_AREA,
+  POSITIONS, routineReps, routineXp, routinePositions, POINTS_PER_XP,
 } from './exercises.js';
 import * as store from './store.js';
 import { BADGES } from './store.js';
@@ -98,6 +98,12 @@ function suggestedRoutine() {
 
 /* ------------------------------------------------------------ home screen */
 
+function positionTags(routine) {
+  return routinePositions(routine)
+    .map((pos) => `<span class="tag tag-pos">${POSITIONS[pos].emoji} ${esc(POSITIONS[pos].label)}</span>`)
+    .join('');
+}
+
 function laznessDots(n) {
   return `<span class="dots">${[1, 2, 3, 4, 5]
     .map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`)
@@ -139,13 +145,14 @@ function renderHome() {
       <div class="routine-blurb">${esc(pick.blurb)}</div>
       <div class="routine-meta">
         <span class="tag">${esc(pickArea.name)}</span>
+        ${positionTags(pick)}
         <span class="tag">~${pick.minutes} min</span>
-        <span class="tag">${routineReps(pick)} reps</span>
-        <span class="tag tag-xp">+${routineXp(pick)} XP</span>
+        <span class="tag tag-xp">${routineXp(pick) * POINTS_PER_XP} pts</span>
       </div>
     </button>
 
     <div class="section-title">Pick a target area</div>
+    <p class="tiny muted" style="margin:-4px 2px 10px">Every workout in here is done lying down — on your back, your side or face down. You will not be asked to stand up.</p>
     <div class="card">
       <div class="bodymap-wrap">
         ${bodyMapSvg()}
@@ -158,7 +165,7 @@ function renderHome() {
             </button>`).join('')}
         </div>
       </div>
-      <p class="tiny muted" style="margin-top:12px">Tap a body part, pick a routine, prop the phone up. The camera counts the reps.</p>
+      <p class="tiny muted" style="margin-top:12px">Tap a body part, pick a routine, put the phone on the floor beside you. The camera counts the reps while you lie there.</p>
     </div>
   `;
 
@@ -221,11 +228,11 @@ function renderArea(areaId) {
         </div>
         <div class="routine-blurb">${esc(r.blurb)}</div>
         <div class="routine-meta">
+          ${positionTags(r)}
           <span class="tag">~${r.minutes} min</span>
-          <span class="tag">${r.moves.length} moves</span>
           <span class="tag">${routineReps(r)} reps</span>
-          <span class="tag tag-xp">+${routineXp(r)} XP</span>
-          ${r.xpMultiplier ? `<span class="tag tag-hot">${r.xpMultiplier}× XP</span>` : ''}
+          <span class="tag tag-xp">${routineXp(r) * POINTS_PER_XP} pts</span>
+          ${r.xpMultiplier ? `<span class="tag tag-hot">${r.xpMultiplier}× score</span>` : ''}
         </div>
         <div style="margin-top:12px">
           ${r.moves.map(([id, reps]) => {
@@ -355,7 +362,7 @@ function renderSettings() {
     <div class="section-title">How it works</div>
     <div class="card tiny muted" style="line-height:1.6">
       <p>Pose tracking runs entirely on your device using MediaPipe. Video frames never leave your phone and nothing is uploaded — progress is stored in this browser only.</p>
-      <p style="margin-top:8px">For the best rep counting: stand or lie 2–3 metres from the phone, get your whole body (especially your feet) in frame, and keep the room reasonably lit. During the 3-2-1 countdown, hold still in the starting position — that is when the app learns your resting pose.</p>
+      <p style="margin-top:8px">For the best rep counting: put the phone flat on the floor (or leaned against something low) about 2 metres away, side-on, so your whole body from head to feet is in shot. Keep the room reasonably lit. During the 3-2-1 countdown, lie still in the starting position — that is when the app works out which way up you are and learns your resting pose.</p>
       <p style="margin-top:8px">If tracking gets confused, the <b>+1</b> button always counts a rep manually.</p>
     </div>
 
@@ -405,7 +412,8 @@ function renderSummary() {
     <div class="summary-hero">
       <span class="big">${result.perfect ? '🏆' : pct >= 60 ? '💪' : '🦥'}</span>
       <h2>${result.perfect ? 'Every single rep.' : pct >= 60 ? 'Good enough. Genuinely.' : 'Something beats nothing.'}</h2>
-      <div class="summary-xp">+${saved.entry.xp} XP</div>
+      <div class="summary-xp">${(result.score ?? saved.entry.xp * POINTS_PER_XP).toLocaleString()}</div>
+      <div class="tiny muted" style="letter-spacing:.16em;text-transform:uppercase;margin-top:-4px">final score · +${saved.entry.xp} XP</div>
       <p class="muted">${esc(routine?.name || 'Workout')} · ${area ? esc(area.name) : ''}</p>
     </div>
 
