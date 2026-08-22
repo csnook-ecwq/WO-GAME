@@ -41,17 +41,23 @@ export function visibilityOf(landmarks, indices) {
 /**
  * Reference frame tiers, best first.
  *
- * `torso` needs your shoulders in shot. `pelvis` needs only your hips and knees,
- * which is what the camera sees when you hold the phone above your hips and look
- * down your own legs — the primary way this app is played.
+ * `torso`  needs your shoulders in shot — everything works.
+ * `pelvis` needs hips and knees, which is what the camera sees when you hold the
+ *          phone above your hips and look down your legs.
+ * `limb`   needs only knees and ankles. It cannot give a body axis, so it serves
+ *          pure joint-angle moves only — but it means pointing the phone at your
+ *          own feet from a chair is enough for ankle pumps, which is exactly how
+ *          someone naturally tests "point your toes".
  */
-export const TIER = { TORSO: 'torso', PELVIS: 'pelvis' };
+export const TIER = { TORSO: 'torso', PELVIS: 'pelvis', LIMB: 'limb' };
 
 /** How much better than nothing a tier is, for "do I have enough to count?" checks. */
-export const TIER_RANK = { [TIER.TORSO]: 2, [TIER.PELVIS]: 1 };
+export const TIER_RANK = { [TIER.TORSO]: 3, [TIER.PELVIS]: 2, [TIER.LIMB]: 1 };
 
-/** Hip width is roughly this fraction of torso length; keeps the two tiers' units comparable. */
+/** Hip width is roughly this fraction of torso length; keeps the tiers' units comparable. */
 const HIP_TO_TORSO = 1.3;
+/** Shin length as a fraction of torso, for the same reason in the limb tier. */
+const SHIN_TO_TORSO = 0.6;
 
 const unit = (vx, vy) => {
   const len = Math.hypot(vx, vy) || 1e-6;
@@ -77,8 +83,12 @@ export function buildFrame(landmarks, opts = {}) {
   const seen = (...idx) => idx.every((i) => vis(p(i)) >= minVis);
   const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
-  // Hips anchor everything — without them there is no body frame at all.
-  if (!seen(LM.L_HIP, LM.R_HIP)) return null;
+  // Without hips there is no body axis, but a knee-to-ankle frame still supports
+  // joint-angle moves — enough to count toe points with only your feet in shot.
+  if (!seen(LM.L_HIP, LM.R_HIP)) {
+    if (!seen(LM.L_KNEE, LM.R_KNEE, LM.L_ANKLE, LM.R_ANKLE)) return null;
+    return limbFrame(landmarks, p);
+  }
 
   const shoulderMid = mid(p(LM.L_SHOULDER), p(LM.R_SHOULDER));
   const hipMid = mid(p(LM.L_HIP), p(LM.R_HIP));
@@ -139,9 +149,116 @@ export function buildFrame(landmarks, opts = {}) {
   };
 }
 
+/**
+ * The fallback frame when the hips are out of shot: built from the shins.
+ *
+ * `along`/`across` exist so callers do not have to special-case it, but the axis
+ * moves with your legs, so only joint-angle signals are trustworthy here. That is
+ * enforced by the tier tags, not by hope.
+ */
+function limbFrame(landmarks, p) {
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const kneeMid = mid(p(LM.L_KNEE), p(LM.R_KNEE));
+  const ankleMid = mid(p(LM.L_ANKLE), p(LM.R_ANKLE));
+  const shin = dist(kneeMid, ankleMid);
+  const scale = Math.max(shin / SHIN_TO_TORSO, 0.08);
+  // Head-ward runs up the shin, from ankles toward knees.
+  const u = unit(kneeMid.x - ankleMid.x, kneeMid.y - ankleMid.y);
+  const n = { x: -u.y, y: u.x };
+  const origin = kneeMid;
+  const along = (q) => ((q.x - origin.x) * u.x + (q.y - origin.y) * u.y) / scale;
+  const across = (q) => ((q.x - origin.x) * n.x + (q.y - origin.y) * n.y) / scale;
+  const place = (a, c) => ({
+    x: origin.x + (u.x * a + n.x * c) * scale,
+    y: origin.y + (u.y * a + n.y * c) * scale,
+  });
+  return {
+    lm: landmarks, p, tier: TIER.LIMB,
+    shoulderMid: kneeMid, hipMid: origin, kneeMid, ankleMid,
+    torso: shin, hipWidth: shin, thigh: shin, shin,
+    scale, rigid: scale, u, n, headWard: u, along, across, place,
+  };
+}
+
 /** True when a frame is good enough for a signal that needs `required`. */
 export function tierSatisfies(frameTier, required) {
   return (TIER_RANK[frameTier] || 0) >= (TIER_RANK[required] || 0);
+}
+
+/* --------------------------------------------------------- plausibility gate */
+
+/**
+ * Decides whether a detection is actually a person in front of the camera.
+ *
+ * This exists because of a real failure: with only a foot in shot, the model
+ * returned a confident, fully-formed skeleton standing next to a chair several
+ * feet away — and the app drew it as the player's body and counted reps off it.
+ * Confidence scores did not catch it. Geometry and persistence do.
+ */
+export function createPoseGate(opts = {}) {
+  const minScale = opts.minScale ?? 0.12;        // body smaller than this is furniture
+  const maxJump = opts.maxJump ?? 0.3;           // of frame, between accepted detections
+  const maxScaleRatio = opts.maxScaleRatio ?? 2; // sudden size changes are teleports
+  const lockFrames = opts.lockFrames ?? 3;       // consecutive good frames to trust a new body
+  const staleMs = opts.staleMs ?? 700;           // after this, treat the next body as new
+
+  let anchor = null;      // last accepted { x, y, scale, t }
+  let streak = 0;
+
+  return {
+    get locked() { return !!anchor; },
+    reset() { anchor = null; streak = 0; },
+
+    /**
+     * @returns {{ok: boolean, reason?: string}}
+     */
+    check(frame, tMs, needed = []) {
+      if (!frame) { streak = 0; return { ok: false, reason: 'nobody' }; }
+
+      // 1. Joints we care about have to be inside the picture. When the model is
+      //    guessing it pins them just outside the frame.
+      for (const i of needed) {
+        const q = frame.p(i);
+        if (!q || q.x < -0.02 || q.x > 1.02 || q.y < -0.02 || q.y > 1.02) {
+          streak = 0;
+          return { ok: false, reason: 'offscreen' };
+        }
+      }
+
+      // 2. A real body at arm's length fills a decent part of the frame.
+      if (!(frame.scale >= minScale)) {
+        streak = 0;
+        return { ok: false, reason: 'tiny' };
+      }
+
+      const here = { x: frame.hipMid.x, y: frame.hipMid.y, scale: frame.scale, t: tMs };
+      const fresh = !anchor || tMs - anchor.t > staleMs;
+
+      if (!fresh) {
+        // 3. Bodies do not teleport. A hallucination flickers between places.
+        const jumped = Math.hypot(here.x - anchor.x, here.y - anchor.y) > maxJump;
+        const resized = here.scale > anchor.scale * maxScaleRatio
+          || here.scale < anchor.scale / maxScaleRatio;
+        if (jumped || resized) {
+          streak = 0;
+          return { ok: false, reason: 'jumped' };
+        }
+        anchor = here;
+        streak = 0;
+        return { ok: true };
+      }
+
+      // 4. Nothing to compare against — either the first sighting or the body
+      //    went missing long enough to be a different one. Make it prove it is
+      //    really there before trusting it again, or a hallucination that
+      //    appears after a gap gets accepted on sight.
+      streak += 1;
+      if (streak < lockFrames) return { ok: false, reason: 'settling' };
+      anchor = here;
+      streak = 0;
+      return { ok: true };
+    },
+  };
 }
 
 /** Perpendicular distance from point q to the line through a and b. */
@@ -258,6 +375,7 @@ export const SIGNALS = {
  * your shoulders; everything else survives the hand-held, legs-only view.
  */
 export const SIGNAL_TIER = {
+  anklePump: TIER.LIMB,
   crunch: TIER.TORSO,
   bridge: TIER.TORSO,
   elbowBend: TIER.TORSO,
@@ -266,8 +384,39 @@ export const SIGNAL_TIER = {
   armReach: TIER.TORSO,
 };
 
-/** @returns {'torso'|'pelvis'} the frame tier a signal requires. */
+/** @returns {'torso'|'pelvis'|'limb'} the frame tier a signal requires. */
 export const tierFor = (signal) => SIGNAL_TIER[signal] || TIER.PELVIS;
+
+/** The landmarks a move needs in shot, for the framing checklist. */
+export const TIER_JOINTS = {
+  [TIER.TORSO]: [
+    { name: 'shoulders', points: [LM.L_SHOULDER, LM.R_SHOULDER] },
+    { name: 'hips', points: [LM.L_HIP, LM.R_HIP] },
+    { name: 'knees', points: [LM.L_KNEE, LM.R_KNEE] },
+  ],
+  [TIER.PELVIS]: [
+    { name: 'hips', points: [LM.L_HIP, LM.R_HIP] },
+    { name: 'knees', points: [LM.L_KNEE, LM.R_KNEE] },
+    { name: 'ankles', points: [LM.L_ANKLE, LM.R_ANKLE] },
+  ],
+  [TIER.LIMB]: [
+    { name: 'knees', points: [LM.L_KNEE, LM.R_KNEE] },
+    { name: 'ankles', points: [LM.L_ANKLE, LM.R_ANKLE] },
+    { name: 'feet', points: [LM.L_FOOT, LM.R_FOOT] },
+  ],
+};
+
+/**
+ * Which of the parts a move needs are currently visible — drives the live
+ * framing checklist, so "move the phone" can say what is actually missing.
+ */
+export function framingReport(landmarks, signal, minVis = 0.4) {
+  const groups = TIER_JOINTS[tierFor(signal)] || TIER_JOINTS[TIER.PELVIS];
+  return groups.map((g) => ({
+    name: g.name,
+    ok: !!landmarks && visibilityOf(landmarks, g.points) >= minVis,
+  }));
+}
 
 const median = (xs) => {
   if (!xs.length) return 0;
@@ -427,6 +576,7 @@ export function createExerciseTracker(exercise) {
   const needs = exercise.needs || [];
   const minVis = exercise.minVisibility ?? 0.45;
   const required = tierFor(exercise.signal);
+  const gate = createPoseGate(exercise.gate);
 
   // Captured during the countdown and held for the rest of the set.
   let headWard = null;
@@ -434,9 +584,10 @@ export function createExerciseTracker(exercise) {
   return {
     counter,
     exercise,
+    gate,
     requiredTier: required,
     get headWard() { return headWard; },
-    reset() { counter.reset(); headWard = null; },
+    reset() { counter.reset(); gate.reset(); headWard = null; },
     /**
      * @param {Array} landmarks 33 pose landmarks (or null when nobody is seen)
      * @param {number} tMs
@@ -461,6 +612,16 @@ export function createExerciseTracker(exercise) {
       const v = visibilityOf(landmarks, needs);
       if (v < minVis) {
         return { tracking: false, reason: 'framing', visibility: v, reps: counter.reps, repDelta: 0, progress: 0, frame };
+      }
+      // Last line of defence: is this detection actually a person, and the same
+      // person as a moment ago? Everything downstream — the ghost, the orbs, the
+      // rep counter — depends on this being true.
+      const sane = gate.check(frame, tMs, needs);
+      if (!sane.ok) {
+        return {
+          tracking: false, reason: sane.reason, visibility: v, tier: frame.tier,
+          reps: counter.reps, repDelta: 0, progress: 0, frame,
+        };
       }
       const value = signalFn(frame);
       if (calibrating) {

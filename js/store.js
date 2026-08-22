@@ -13,6 +13,7 @@ import { LEVELS, totalStars } from './levels.js';
 import { SKIN_IDS, SKINS } from './ghost.js';
 
 const KEY = 'aura.v1';
+const BACKUP_KEY = 'aura.v1.backup';
 const LEGACY_KEY = 'slothmode.v1';
 
 export const PLAYER_COLORS = [
@@ -55,7 +56,7 @@ const emptyState = () => ({
   profiles: [],
   activeId: null,
   progress: {},
-  settings: { sound: true, voice: true, showCamera: false, mirror: true },
+  settings: { sound: true, voice: true, showCamera: false, mirror: true, stats: false },
 });
 
 let state = emptyState();
@@ -66,23 +67,67 @@ const uid = () => `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).
 /* ------------------------------------------------------------------ load */
 
 export function load() {
+  const hydrate = (raw) => {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') throw new Error('not a save');
+    return {
+      ...emptyState(),
+      ...parsed,
+      settings: { ...emptyState().settings, ...(parsed.settings || {}) },
+    };
+  };
+
+  let loaded = null;
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      state = {
-        ...emptyState(),
-        ...parsed,
-        settings: { ...emptyState().settings, ...(parsed.settings || {}) },
-      };
-    } else {
-      migrateLegacy();
-    }
+    if (raw) loaded = hydrate(raw);
   } catch (err) {
-    console.warn('Could not read saved progress, starting fresh.', err);
-    state = emptyState();
+    console.warn('Main save unreadable, trying the backup.', err);
   }
+  // A second copy, so one bad write or a half-finished parse cannot cost you
+  // months of stars.
+  if (!loaded || !loaded.profiles?.length) {
+    try {
+      const backup = localStorage.getItem(BACKUP_KEY);
+      if (backup) {
+        const fromBackup = hydrate(backup);
+        if (fromBackup.profiles?.length) loaded = fromBackup;
+      }
+    } catch { /* no usable backup either */ }
+  }
+
+  state = loaded || emptyState();
+  if (!state.profiles.length) migrateLegacy();
+  askToKeepStorage();
   return state;
+}
+
+/**
+ * Ask the browser not to evict this data.
+ *
+ * iOS in particular clears storage for sites it considers idle, and an installed
+ * home-screen app is much likelier to be granted persistence than a tab. Nothing
+ * to do if it is refused — this is a request, not a guarantee.
+ */
+async function askToKeepStorage() {
+  try {
+    if (navigator.storage?.persist && !(await navigator.storage.persisted())) {
+      await navigator.storage.persist();
+    }
+  } catch { /* not supported here */ }
+}
+
+/** Where this copy of the app keeps its data — they are separate boxes. */
+export function storageContext() {
+  let standalone = false;
+  try {
+    standalone = window.matchMedia?.('(display-mode: standalone)')?.matches
+      || window.navigator.standalone === true;
+  } catch { /* assume browser */ }
+  return {
+    standalone,
+    label: standalone ? 'the home screen app' : 'this browser',
+  };
 }
 
 /** Carries over progress from the previous version of the app, if any. */
@@ -109,11 +154,62 @@ function migrateLegacy() {
 
 function save() {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    const json = JSON.stringify(state);
+    // Never let an empty state overwrite a real one. If something upstream has
+    // gone wrong, losing the write is far better than losing the progress.
+    if (!state.profiles.length) {
+      const existing = localStorage.getItem(KEY);
+      if (existing && existing.length > json.length) {
+        console.warn('Refusing to overwrite saved progress with an empty state.');
+        return;
+      }
+    }
+    localStorage.setItem(KEY, json);
+    localStorage.setItem(BACKUP_KEY, json);
   } catch (err) {
     console.warn('Could not save progress.', err);
   }
   listeners.forEach((fn) => fn(state));
+}
+
+/* ------------------------------------------------------------- transfer */
+
+/**
+ * Progress lives per storage box, and a browser tab cannot see what the
+ * home-screen app saved. This is the bridge: a code you can read out of one and
+ * paste into the other.
+ */
+export function exportProfile(id = state.activeId) {
+  const profile = state.profiles.find((p) => p.id === id);
+  if (!profile) return '';
+  const payload = { v: 1, profile, progress: progressOf(id) };
+  const json = JSON.stringify(payload);
+  // encodeURIComponent first so names with accents or emoji survive btoa.
+  return btoa(unescape(encodeURIComponent(json)));
+}
+
+/** @returns {{ok: boolean, name?: string, error?: string}} */
+export function importProfile(code) {
+  let payload;
+  try {
+    payload = JSON.parse(decodeURIComponent(escape(atob(String(code).trim()))));
+  } catch {
+    return { ok: false, error: 'That code does not look right.' };
+  }
+  if (!payload?.profile?.name || !payload?.progress) {
+    return { ok: false, error: 'That code is missing its progress.' };
+  }
+  // A fresh id, so importing into a device that already has this profile makes a
+  // second copy rather than silently merging two histories.
+  const id = uid();
+  const profile = { ...payload.profile, id, createdAt: Date.now() };
+  const existing = state.profiles.filter((p) => p.name === profile.name);
+  if (existing.length) profile.name = `${profile.name} (${existing.length + 1})`.slice(0, 14);
+  state.profiles.push(profile);
+  state.progress[id] = { ...emptyProgress(), ...payload.progress };
+  state.activeId = id;
+  save();
+  return { ok: true, name: profile.name };
 }
 
 export function getState() { return state; }

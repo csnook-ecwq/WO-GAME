@@ -17,6 +17,13 @@
 
 import { LM } from './detectors.js';
 
+/**
+ * Where the model's confidence gradient becomes "definitely you". Widening the
+ * gap softens the outline; narrowing it sharpens and starts to look cut out.
+ */
+const EDGE_LO = 0.35;
+const EDGE_HI = 0.62;
+
 /* ------------------------------------------------------------------ layout */
 
 /** Where a video lands on screen under `object-fit: cover`. */
@@ -218,6 +225,10 @@ export function createGhostRenderer(canvas) {
   // Raw mask pixels at model resolution.
   const maskCanvas = document.createElement('canvas');
   const maskCtx = maskCanvas.getContext('2d');
+  let maskImage = null;
+  // Quarter-size copy of the silhouette, scaled back up to make the glow.
+  const bloom = document.createElement('canvas');
+  const bloomCtx = bloom.getContext('2d');
 
   let quality = 'mask';
   let drawMs = 0;
@@ -231,6 +242,9 @@ export function createGhostRenderer(canvas) {
     }
     shapeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     paintCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bw = Math.max(1, Math.round(w / 4));
+    const bh = Math.max(1, Math.round(h / 4));
+    if (bloom.width !== bw || bloom.height !== bh) { bloom.width = bw; bloom.height = bh; }
   }
 
   /** Paints one person's mask into the shape layer, in video space. */
@@ -239,14 +253,22 @@ export function createGhostRenderer(canvas) {
     if (maskCanvas.width !== width || maskCanvas.height !== height) {
       maskCanvas.width = width;
       maskCanvas.height = height;
+      maskImage = null;
     }
-    const img = maskCtx.createImageData(width, height);
-    const px = img.data;
+    // The buffer is reallocated only when the mask size changes; building a
+    // fresh one every frame was pure garbage collection.
+    if (!maskImage) maskImage = maskCtx.createImageData(width, height);
+    const px = maskImage.data;
+    // The model hands back a confidence gradient. Copied straight to alpha it
+    // reads as a soft haze around the body — the "blobby round my legs" problem.
+    // A smoothstep turns it into a firm edge with a single pixel of feather.
     for (let i = 0, j = 0; i < data.length; i++, j += 4) {
+      const v = data[i] / 255;
+      const t = v <= EDGE_LO ? 0 : v >= EDGE_HI ? 1 : (v - EDGE_LO) / (EDGE_HI - EDGE_LO);
       px[j] = 255; px[j + 1] = 255; px[j + 2] = 255;
-      px[j + 3] = data[i];
+      px[j + 3] = (t * t * (3 - 2 * t) * 255) | 0;
     }
-    maskCtx.putImageData(img, 0, 0);
+    maskCtx.putImageData(maskImage, 0, 0);
 
     // The mask lives in whatever rotation the detector used, so spin it back.
     const swap = rotation % 180 !== 0;
@@ -255,10 +277,7 @@ export function createGhostRenderer(canvas) {
     shapeCtx.save();
     shapeCtx.translate(rect.x + rect.w / 2, rect.y + rect.h / 2);
     shapeCtx.rotate((-rotation * Math.PI) / 180);
-    // A touch of blur turns a hard cut-out into something that reads as a glow.
-    shapeCtx.filter = 'blur(2px)';
     shapeCtx.drawImage(maskCanvas, -mw / 2, -mh / 2, mw, mh);
-    shapeCtx.filter = 'none';
     shapeCtx.restore();
   }
 
@@ -381,19 +400,20 @@ export function createGhostRenderer(canvas) {
         shapeCtx.drawImage(paint, 0, 0, w, h);
         shapeCtx.restore();
 
-        // 3. Halo, bloom, then the body itself. Everything is additive: no
-        //    erase-based tricks, which would punch holes in the background.
+        // 3. Bloom, then the body itself.
+        //
+        //    The bloom used to be `ctx.filter = 'blur(14px)'` across the whole
+        //    canvas, twice per frame. On a phone that is brutal — it was the
+        //    single biggest cost in the app. Drawing the silhouette into a
+        //    quarter-size buffer and scaling it back up gets the same soft halo
+        //    from the hardware's own smoothing, for about a sixteenth of the work.
+        bloomCtx.setTransform(1, 0, 0, 1, 0, 0);
+        bloomCtx.clearRect(0, 0, bloom.width, bloom.height);
+        bloomCtx.drawImage(shape, 0, 0, bloom.width, bloom.height);
+
         ctx.save();
-        if (showCamera) {
-          // A soft white halo lifts the figure off a busy room.
-          ctx.globalAlpha = 0.4;
-          ctx.filter = 'blur(9px)';
-          ctx.drawImage(shape, -w * 0.008, -h * 0.008, w * 1.016, h * 1.016);
-        }
-        ctx.globalAlpha = showCamera ? 0.55 : 0.45;
-        ctx.filter = 'blur(14px)';
-        ctx.drawImage(shape, 0, 0, w, h);
-        ctx.filter = 'none';
+        ctx.globalAlpha = showCamera ? 0.6 : 0.5;
+        ctx.drawImage(bloom, -w * 0.02, -h * 0.02, w * 1.04, h * 1.04);
         ctx.globalAlpha = quality === 'outline' ? 0.4 : (showCamera ? 0.92 : 0.88);
         ctx.drawImage(shape, 0, 0, w, h);
         ctx.restore();

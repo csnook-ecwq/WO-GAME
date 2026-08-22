@@ -58,7 +58,7 @@ async function loadVision() {
  * that mask is what makes the ghost contour to your actual body instead of being
  * a stick figure. `players` is how many bodies to look for at once.
  */
-export async function getLandmarker({ model = 'lite', segmentation = true, players = 1 } = {}) {
+export async function getLandmarker({ model = 'full', segmentation = true, players = 1 } = {}) {
   const wanted = `${model}:${segmentation}:${players}`;
   if (landmarker && landmarkerKey === wanted) return landmarker;
   if (loadingPromise && landmarkerKey === wanted) return loadingPromise;
@@ -75,9 +75,12 @@ export async function getLandmarker({ model = 'lite', segmentation = true, playe
       runningMode: 'VIDEO',
       numPoses: Math.max(1, Math.min(4, players)),
       outputSegmentationMasks: segmentation,
-      minPoseDetectionConfidence: 0.5,
-      minPosePresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
+      // Raised from 0.5: at 0.5 the model confidently returned a whole person
+      // assembled out of a chair and a table leg. Being told "no one is here" is
+      // far better than being shown a stranger wearing your aura.
+      minPoseDetectionConfidence: 0.65,
+      minPosePresenceConfidence: 0.65,
+      minTrackingConfidence: 0.6,
     });
     try {
       landmarker = await vision.PoseLandmarker.createFromOptions(fileset, options('GPU'));
@@ -152,8 +155,8 @@ export async function startCamera(video, { facing = 'user' } = {}) {
     audio: false,
     video: {
       facingMode: facing,
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
+      width: { ideal: 960 },
+      height: { ideal: 540 },
       frameRate: { ideal: 30 },
     },
   });
@@ -197,6 +200,31 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
   const PROBE_FRAMES = 3;           // detections spent on each candidate
   const GOOD_ENOUGH = 1.15;         // a confident, head-up detection: stop early
   const LOST_BEFORE_REPROBE = 45;   // ~2-4s of seeing nobody
+
+  // Detections arrive slower than frames do, so the last reading is reused in
+  // between. Easing toward each new reading instead of snapping to it is the
+  // difference between a body that glides and one that stutters.
+  const SMOOTHING = 0.45;
+  let smoothed = null;
+  function smooth(landmarks) {
+    if (!landmarks) { smoothed = null; return null; }
+    if (!smoothed || smoothed.length !== landmarks.length) {
+      smoothed = landmarks.map((p) => ({ ...p }));
+      return smoothed;
+    }
+    for (let i = 0; i < landmarks.length; i++) {
+      const a = smoothed[i];
+      const b = landmarks[i];
+      // A big move is a real move (or a new body): follow it immediately rather
+      // than sliding across the screen.
+      const jump = Math.hypot(b.x - a.x, b.y - a.y) > 0.25;
+      a.x = jump ? b.x : a.x + (b.x - a.x) * SMOOTHING;
+      a.y = jump ? b.y : a.y + (b.y - a.y) * SMOOTHING;
+      a.z = b.z;
+      a.visibility = b.visibility;
+    }
+    return smoothed;
+  }
 
   // Rotated frames are drawn here before being handed to the model.
   const work = document.createElement('canvas');
@@ -298,12 +326,16 @@ export function createPoseLoop(video, model, onFrame, opts = {}) {
         lastPeople = [];
       } else {
         lastPeople = (raw || []).map((lm, i) => ({
-          landmarks: lm.map((p) => mapFromRotated(p, deg)),
+          // Only the first person is smoothed; extra bodies are drawn as-is.
+          landmarks: i === 0
+            ? smooth(lm.map((p) => mapFromRotated(p, deg))).map((p) => ({ ...p }))
+            : lm.map((p) => mapFromRotated(p, deg)),
           mask: masks?.[i] || null,
           maskRotation: deg,
         }));
         // If everyone disappears for a while, the phone was probably moved or we
         // rolled onto our side: go looking for the right rotation again.
+        if (!lastPeople.length) smooth(null);
         lostDetections = lastPeople.length ? 0 : lostDetections + 1;
         if (lostDetections >= LOST_BEFORE_REPROBE) startProbe();
       }

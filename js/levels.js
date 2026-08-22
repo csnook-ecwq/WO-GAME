@@ -22,10 +22,10 @@ export const WORLD_BY_ID = Object.fromEntries(WORLDS.map((w) => [w.id, w]));
 /** `moves` are [exerciseId, reps]. Keep every move in a level on one view. */
 export const LEVELS = [
   // ---- First Light: hand-held, tiny effort, teaches the orbs
-  { id: 'l1', world: 'first-light', name: 'Toes First', blurb: 'Point and flex. That is the whole level.',
-    moves: [['ankle-pumps', 12], ['ankle-pumps', 12]] },
-  { id: 'l2', world: 'first-light', name: 'Little Kicks', blurb: 'Small flutters. Pop the orbs with your feet.',
-    moves: [['flutter-kicks', 16], ['ankle-pumps', 12], ['flutter-kicks', 16]] },
+  { id: 'l1', world: 'first-light', name: 'Little Kicks', blurb: 'Small flutters. Pop the orbs with your feet.',
+    moves: [['flutter-kicks', 14], ['flutter-kicks', 14]] },
+  { id: 'l2', world: 'first-light', name: 'Toes First', blurb: 'Point and flex. Smaller orbs, right on your toes.',
+    moves: [['ankle-pumps', 12], ['flutter-kicks', 16], ['ankle-pumps', 12]] },
   { id: 'l3', world: 'first-light', name: 'Knees In', blurb: 'Pull your knees to your chest and back.',
     moves: [['knee-tucks', 10], ['flutter-kicks', 20], ['knee-tucks', 10]] },
   { id: 'l4', world: 'first-light', name: 'Slow Wheels', blurb: 'Cycle your knees, one at a time.',

@@ -363,12 +363,29 @@ function renderMe() {
       ${toggleRow('sound', 'Sound', 'Little pops when you hit an orb')}
       ${toggleRow('voice', 'Count out loud', 'Speaks your rep count')}
       ${toggleRow('showCamera', 'Show the room', 'Off means you only see your glowing self')}
+      ${toggleRow('stats', 'Tracking numbers', 'Shows frame rate and what the camera is seeing, for working out problems')}
     </div>
 
     <div class="section-title">How it works</div>
     <div class="card glass tiny muted" style="line-height:1.6">
       <p>Body tracking runs entirely on your phone. No video is uploaded, and there is no server — your progress lives in this browser only.</p>
       <p style="margin-top:8px">For the best tracking: even light, no baggy blankets over your legs, and keep your hips in shot. If an orb will not pop, tap <b>+1</b> and keep going.</p>
+    </div>
+
+    <div class="section-title">Where this is saved</div>
+    <div class="card glass">
+      <p class="tiny muted" style="line-height:1.6">
+        Your progress is saved in <b>${esc(store.storageContext().label)}</b>.
+        A Safari tab and the home screen app keep separate copies and cannot see each
+        other's — so if your profile looks missing, it is probably sitting in the other one.
+        ${store.storageContext().standalone ? '' : 'Adding this to your home screen and using that from now on is the steadiest option.'}
+      </p>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="copyCodeBtn">Copy my code</button>
+        <button class="btn" id="pasteCodeBtn">Paste a code</button>
+      </div>
+      <textarea id="codeBox" class="code-box" hidden readonly rows="3"></textarea>
+      <p class="tiny muted" id="codeHint" hidden></p>
     </div>
 
     <div class="section-title">Danger zone</div>
@@ -394,6 +411,36 @@ function renderMe() {
       if (key === 'voice') setVoice(next);
     });
   });
+  el('copyCodeBtn').addEventListener('click', async () => {
+    const code = store.exportProfile();
+    const box = el('codeBox');
+    box.value = code;
+    box.hidden = false;
+    box.select();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+    } catch { /* clipboard blocked — the code is on screen to copy by hand */ }
+    el('codeHint').hidden = false;
+    el('codeHint').textContent = copied
+      ? 'Copied. Open Aura in the other place and tap Paste a code.'
+      : 'Copy the code above, then open Aura in the other place and tap Paste a code.';
+  });
+
+  el('pasteCodeBtn').addEventListener('click', () => {
+    const code = prompt('Paste the code from your other browser:');
+    if (!code) return;
+    const res = store.importProfile(code);
+    if (res.ok) {
+      toast(`${res.name} restored.`);
+      paintWho();
+      renderMe();
+    } else {
+      toast(res.error);
+    }
+  });
+
   el('switchBtn').addEventListener('click', renderGate);
   el('resetBtn').addEventListener('click', () => {
     if (confirm(`Erase all of ${p.name}'s stars and progress? This cannot be undone.`)) {

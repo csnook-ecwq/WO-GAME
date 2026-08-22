@@ -13,7 +13,7 @@
  */
 
 import { EXERCISE_BY_ID, VIEWS, repPoints, POINTS_PER_XP } from './exercises.js';
-import { createExerciseTracker, LM } from './detectors.js';
+import { createExerciseTracker, framingReport, LM } from './detectors.js';
 import { getLandmarker, startCamera, stopCamera, createPoseLoop } from './pose.js';
 import { createGhostRenderer, SKINS } from './ghost.js';
 import * as store from './store.js';
@@ -53,16 +53,68 @@ const sideOf = (name) => (name.startsWith('L_') ? 'L' : 'R');
  * Where an orb goes for one joint: the joint's resting spot plus the travel the
  * move demands. `across` is mirrored for the right side so "outward" means
  * outward on both sides.
+ *
+ * Moves whose target joint IS the frame's origin — bridges, where the hips both
+ * do the work and define the coordinate system — set an `anchor` instead. Those
+ * orbs are stored as an offset from a landmark that stays put while the hips
+ * move, and resolved fresh each frame, otherwise the orb rides along with the
+ * hips and can never be reached.
  */
 export function targetFor(spec, rest, jointName) {
   const dir = SIDES[sideOf(jointName)];
-  return {
+  const base = {
     joint: jointName,
-    along: rest.along + (spec.along || 0),
-    across: rest.across + (spec.across || 0) * dir,
     radius: spec.radius ?? 0.34,
     born: 0,
     hit: false,
+  };
+  if (spec.anchor) {
+    return {
+      ...base,
+      anchor: spec.anchor,
+      offAlong: spec.along || 0,
+      offAcross: (spec.across || 0) * dir,
+    };
+  }
+  return {
+    ...base,
+    along: rest.along + (spec.along || 0),
+    across: rest.across + (spec.across || 0) * dir,
+  };
+}
+
+/**
+ * Which side of the body an anchored orb belongs on.
+ *
+ * "Up" in body coordinates is not a fixed direction — it depends which way you
+ * happen to be facing — so a bridge orb offset blindly can land behind your back.
+ * The knees settle it: in a bridge your feet are planted and your knees are bent
+ * toward the same side your hips lift.
+ */
+export function liftSide(frame) {
+  const s = Math.sign(frame.across(frame.kneeMid));
+  return s || 1;
+}
+
+/** The landmark an anchored orb hangs off, in image coordinates. */
+function anchorPoint(name, frame) {
+  if (name === 'shoulderKneeMid') {
+    return {
+      x: (frame.shoulderMid.x + frame.kneeMid.x) / 2,
+      y: (frame.shoulderMid.y + frame.kneeMid.y) / 2,
+    };
+  }
+  return frame.hipMid;
+}
+
+/** An orb's body-frame position right now. */
+export function orbCoords(orb, frame) {
+  if (!orb.anchor || !frame) return { along: orb.along, across: orb.across };
+  const a = anchorPoint(orb.anchor, frame);
+  const side = orb.liftSide ?? liftSide(frame);
+  return {
+    along: frame.along(a) + orb.offAlong,
+    across: frame.across(a) + orb.offAcross * side,
   };
 }
 
@@ -91,6 +143,9 @@ const S = {
   basePoints: 20,
   lastFrame: null,
   probing: false,
+  tier: null,
+  framingSig: '',
+  framingReadySince: 0,
   lastTracking: false,
   lastReason: '',
   showCamera: false,
@@ -119,10 +174,17 @@ function cacheUi() {
     pause: el('gamePause'),
     manual: el('gameManual'),
     skip: el('gameSkip'),
+    framing: el('gameFraming'),
+    framingTitle: el('framingTitle'),
+    framingSetup: el('framingSetup'),
+    framingHint: el('framingHint'),
+    framingList: el('framingList'),
+    framingSkip: el('framingSkip'),
     rest: el('gameRest'),
     restTimer: el('gameRestTimer'),
     restNext: el('gameRestNext'),
     restSkip: el('gameRestSkip'),
+    stats: el('gameStats'),
     loading: el('gameLoading'),
     loadingText: el('gameLoadingText'),
     loadingCancel: el('gameLoadingCancel'),
@@ -135,7 +197,10 @@ function cacheUi() {
 let view = { w: 0, h: 0, dpr: 1 };
 
 function resize() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Deliberately 1x. At 2x this canvas was 780x1688 pixels and every blur,
+  // composite and fill paid for four times the area — the actual cause of the
+  // lag on a perfectly fast phone. Nothing on it is text, so nothing looks worse.
+  const dpr = 1;
   const rect = ui.canvas.getBoundingClientRect();
   ui.canvas.width = Math.round(rect.width * dpr);
   ui.canvas.height = Math.round(rect.height * dpr);
@@ -151,22 +216,28 @@ function spawnOrbs(frame, now) {
   if (!spec) return;
   const joints = spec.joints;
   S.orbs = [];
+  const rest = (j) => S.rest[j] || (spec.anchor ? { along: 0, across: 0 } : null);
+  const side = spec.anchor ? liftSide(frame) : 1;
+  const make = (j) => {
+    const r = rest(j);
+    return r ? { ...targetFor(spec, r, j), liftSide: side, born: now } : null;
+  };
   if (spec.pairing === 'mirror') {
     for (const j of joints) {
-      const rest = S.rest[j];
-      if (rest) S.orbs.push({ ...targetFor(spec, rest, j), born: now });
+      const orb = make(j);
+      if (orb) S.orbs.push(orb);
     }
   } else {
     // Alternating moves show one orb at a time, swapping sides after each pop.
-    const j = joints[S.spawned % joints.length];
-    const rest = S.rest[j];
-    if (rest) S.orbs.push({ ...targetFor(spec, rest, j), born: now });
+    const orb = make(joints[S.spawned % joints.length]);
+    if (orb) S.orbs.push(orb);
   }
   S.spawned += S.orbs.length;
 }
 
 function orbScreenPos(orb, frame, project) {
-  return project(frame.place(orb.along, orb.across));
+  const { along, across } = orbCoords(orb, frame);
+  return project(frame.place(along, across));
 }
 
 function popOrb(orb, frame, project) {
@@ -233,27 +304,40 @@ function countRep(frame, fromOrb) {
 
 function onFrame(landmarks, tMs, meta) {
   S.probing = !!meta?.probing;
-  const calibrating = S.phase === 'countdown';
+  const calibrating = S.phase === 'countdown' || S.phase === 'framing';
   const people = meta?.people || [];
   let res = null;
 
-  if (S.tracker && (S.phase === 'active' || calibrating)) {
+  if (S.tracker) {
     res = S.tracker.update(landmarks, tMs, calibrating);
     S.lastTracking = !!res.tracking;
     S.lastReason = res.reason || '';
     S.progress = res.progress || 0;
+    S.tier = res.frame?.tier || null;
     if (res.frame && res.tracking) S.lastFrame = res.frame;
   }
 
-  // Draw the world: background + your glowing body.
+  // Only ever draw a body the tracker actually accepted. Drawing whatever the
+  // model returned is how a hallucinated person standing by a chair ended up
+  // wearing the player's aura.
+  const accepted = res?.tracking && people.length ? [people[0]] : [];
+
   const { project } = ghost.render({
     video: ui.video,
-    people,
+    people: accepted,
     styles: [S.style],
-    showCamera: S.showCamera,
+    showCamera: S.showCamera || S.phase === 'framing',
     time: tMs,
     view,
   });
+
+  paintStats(tMs, meta, res);
+
+  if (S.phase === 'framing') {
+    paintFraming(landmarks, res);
+    drawParticles(ui.canvas.getContext('2d'), tMs);
+    return;
+  }
 
   const ctx = ui.canvas.getContext('2d');
   const frame = res?.frame;
@@ -269,13 +353,14 @@ function onFrame(landmarks, tMs, meta) {
         const idx = jointIndex(orb.joint);
         const jp = frame.p(idx);
         if (jp) {
-          if (isHit(frame.along(jp), frame.across(jp), orb)) {
+          const where = orbCoords(orb, frame);
+          if (isHit(frame.along(jp), frame.across(jp), { ...orb, ...where })) {
             popOrb(orb, frame, project);
             // The orb sat where we guessed the joint would reach; now we know
             // where it actually reached, so nudge the next one toward reality.
             const spec = S.exercise.target;
             const rest = S.rest[orb.joint];
-            if (rest && spec) {
+            if (rest && spec && !spec.anchor) {
               rest.learnAlong = frame.along(jp) - (spec.along || 0);
               rest.learnAcross = frame.across(jp) - (spec.across || 0) * SIDES[sideOf(orb.joint)];
               rest.along = rest.along * 0.6 + rest.learnAlong * 0.4;
@@ -302,13 +387,57 @@ function onFrame(landmarks, tMs, meta) {
 
     drawOrbs(ctx, frame, project, tMs);
   } else if (S.phase === 'active') {
-    if (S.probing) setCoach('Finding you…', true);
-    else if (S.lastReason === 'tier') setCoach(VIEWS[S.exercise.view]?.hint || 'Move the phone back a little', true);
-    else if (S.lastReason === 'nobody') setCoach('I cannot see you — is your body in shot?', true);
-    else setCoach('Move the phone so your hips and legs are in frame', true);
+    setCoach(trackingHint(), true);
   }
 
   drawParticles(ctx, tMs);
+}
+
+/**
+ * The numbers behind the picture, when you turn them on in settings.
+ *
+ * This exists because "it's laggy" cost a code read and four screenshots to pin
+ * down. Next time the screenshot should say which part is slow and whether the
+ * body on screen was accepted or thrown away.
+ */
+let fpsCount = 0;
+let fpsAt = 0;
+let fps = 0;
+
+function paintStats(tMs, meta, res) {
+  fpsCount += 1;
+  if (tMs - fpsAt > 500) {
+    fps = Math.round((fpsCount * 1000) / (tMs - fpsAt));
+    fpsCount = 0;
+    fpsAt = tMs;
+  }
+  if (!store.getState().settings.stats) {
+    if (!ui.stats.hidden) ui.stats.hidden = true;
+    return;
+  }
+  ui.stats.hidden = false;
+  const verdict = res?.tracking ? 'accepted' : (res?.reason || 'no pose');
+  ui.stats.textContent = [
+    `fps ${fps}   infer ${Math.round(meta?.inferenceMs || 0)}ms`,
+    `draw ${Math.round(ghost.drawMs)}ms   ghost ${ghost.quality}`,
+    `pose ${verdict}   tier ${S.tier || '—'}`,
+    `rot ${meta?.rotation ?? 0}°   orbs ${S.orbs.filter((o) => !o.hit).length}`,
+  ].join('\n');
+}
+
+/** Plain-language version of why the tracker is not counting right now. */
+function trackingHint() {
+  if (S.probing) return 'Finding you…';
+  switch (S.lastReason) {
+    case 'nobody': return 'I cannot see you — point the camera at yourself';
+    case 'tier': return VIEWS[S.exercise.view]?.hint || 'Move the phone back a little';
+    case 'framing': return 'Move the phone until your legs are fully in shot';
+    case 'offscreen': return 'Part of you is outside the picture';
+    case 'tiny': return 'Bring the phone a little closer';
+    case 'jumped': return 'Hold the phone steady for a second';
+    case 'settling': return 'Nearly there — hold still';
+    default: return 'Move the phone so your legs are in frame';
+  }
 }
 
 function drawOrbs(ctx, frame, project, tMs) {
@@ -326,7 +455,8 @@ function drawOrbs(ctx, frame, project, tMs) {
     // How close the joint is, so the orb can swell as you approach it.
     let nearness = 0;
     if (jp) {
-      const d = Math.hypot(frame.along(jp) - orb.along, frame.across(jp) - orb.across);
+      const where = orbCoords(orb, frame);
+      const d = Math.hypot(frame.along(jp) - where.along, frame.across(jp) - where.across);
       nearness = Math.max(0, 1 - d / (orb.radius * 3));
     }
     const pulse = 1 + Math.sin(tMs * 0.006) * 0.05 + nearness * 0.18;
@@ -404,6 +534,59 @@ function sleep(ms) {
 }
 function wakeSleepers() { [...sleepers].forEach((fn) => fn()); }
 
+/* ---------------------------------------------------------------- framing */
+
+/**
+ * "Move the phone so your hips and legs are in frame" is useless advice when you
+ * cannot see what the app can see. This shows the camera with a live checklist of
+ * the parts this move actually needs, and starts the moment they are all there.
+ */
+function paintFraming(landmarks, res) {
+  const report = framingReport(landmarks, S.exercise.signal);
+  const allOk = report.every((r) => r.ok);
+  const sig = report.map((r) => `${r.name}${r.ok ? '1' : '0'}`).join();
+  if (sig !== S.framingSig) {
+    S.framingSig = sig;
+    ui.framingList.innerHTML = report.map((r) => `
+      <span class="framing-chip ${r.ok ? 'ok' : ''}">${r.ok ? '✓' : '○'} ${r.name}</span>
+    `).join('');
+  }
+
+  const hint = !landmarks ? 'Point the camera at yourself'
+    : !allOk ? `Move the phone until every part below is ticked`
+    : res?.tracking ? 'Got you — hold still'
+    : res?.reason === 'settling' ? 'Got you — hold still'
+    : res?.reason === 'jumped' ? 'Hold the phone steady for a moment'
+    : res?.reason === 'tiny' ? 'Come a bit closer, or bring the phone nearer'
+    : res?.reason === 'offscreen' ? 'Some of you is outside the picture'
+    : 'Almost — keep still';
+  if (ui.framingHint.textContent !== hint) ui.framingHint.textContent = hint;
+
+  // Ready means the parts are visible AND the tracker trusts the detection.
+  const ready = allOk && res?.tracking;
+  S.framingReadySince = ready ? (S.framingReadySince || performance.now()) : 0;
+}
+
+async function runFraming(ctl) {
+  S.phase = 'framing';
+  S.framingSig = '';
+  S.framingReadySince = 0;
+  ui.framing.hidden = false;
+  ui.framingTitle.textContent = VIEWS[S.exercise.view]?.label || 'Get in frame';
+  ui.framingSetup.textContent = VIEWS[S.exercise.view]?.hint || '';
+  setCoach('');
+
+  const giveUpAt = Date.now() + 25000;
+  while (!ctl.quit && !ctl.skip && cameraOk) {
+    // Held steady and complete for most of a second: good enough, get going.
+    if (S.framingReadySince && performance.now() - S.framingReadySince > 700) break;
+    if (Date.now() > giveUpAt) break;
+    await sleep(120);
+  }
+  ctl.skip = false;
+  ui.framing.hidden = true;
+}
+
 async function runCountdown(ctl) {
   S.phase = 'countdown';
   ui.countdown.hidden = false;
@@ -473,7 +656,7 @@ async function setupCamera(facing, players) {
   ui.loadingText.textContent = 'Waking up the camera…';
   stream = await startCamera(ui.video, { facing });
   ui.loadingText.textContent = 'Loading the body tracker (first time only)…';
-  const model = await getLandmarker({ model: 'lite', segmentation: true, players });
+  const model = await getLandmarker({ segmentation: true, players });
   poseLoop = createPoseLoop(ui.video, model, onFrame);
   poseLoop.start();
   cameraOk = true;
@@ -636,8 +819,9 @@ export async function playLevel(level, { style } = {}) {
   ui.manual.onclick = () => { if (S.phase === 'active') countRep(null, false); };
   ui.skip.onclick = () => {
     if (S.phase === 'active') finishMove('skip');
-    else if (S.phase === 'countdown') { ctl.skip = true; wakeSleepers(); }
+    else if (S.phase === 'countdown' || S.phase === 'framing') { ctl.skip = true; wakeSleepers(); }
   };
+  ui.framingSkip.onclick = () => { ctl.skip = true; wakeSleepers(); };
   ui.pause.onclick = () => {
     S.paused = !S.paused;
     ui.pause.textContent = S.paused ? 'Resume' : 'Pause';
@@ -683,6 +867,8 @@ export async function playLevel(level, { style } = {}) {
     ui.step.textContent = `${i + 1} of ${level.moves.length}`;
     paintReps();
 
+    await runFraming(ctl);
+    if (ctl.quit) break;
     await runCountdown(ctl);
     if (ctl.quit) break;
 
@@ -720,6 +906,8 @@ export async function playLevel(level, { style } = {}) {
   window.removeEventListener('orientationchange', onResize);
   ui.root.hidden = true;
   ui.rest.hidden = true;
+  ui.stats.hidden = true;
+  ui.framing.hidden = true;
   ui.countdown.hidden = true;
   ui.coach.hidden = true;
   ui.pause.textContent = 'Pause';

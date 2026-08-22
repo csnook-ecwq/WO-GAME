@@ -476,6 +476,76 @@ input { font: inherit; color: inherit; }
 .loader { width: 46px; height: 46px; border-radius: 50%; border: 4px solid rgba(42,35,51,0.1); border-top-color: var(--blush); animation: spin 0.9s linear infinite; margin: 0 auto 14px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.code-box {
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.8);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  word-break: break-all;
+  resize: none;
+}
+.code-box[hidden] { display: none; }
+
+.stats {
+  /* Left edge, vertically centred: the only column of the play screen that is
+     never occupied — score chip, countdown and reps all sit centred. */
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  z-index: 7;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(42, 35, 51, 0.72);
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre;
+  pointer-events: none;
+}
+.stats[hidden] { display: none; }
+
+/* --------------------------------------------------------------- framing */
+
+.framing {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(var(--safe-bottom) + 18px);
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  padding: 0 14px;
+  pointer-events: none;
+}
+.framing[hidden] { display: none; }
+.framing-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: var(--radius);
+  text-align: center;
+}
+.framing-card b { display: block; font-size: 16px; }
+.framing-card small { display: block; color: var(--ink-soft); font-size: 12.5px; margin-top: 4px; line-height: 1.4; }
+.framing-list { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin: 12px 0 10px; }
+.framing-chip {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(42, 35, 51, 0.06);
+  color: var(--ink-soft);
+  transition: background 0.2s, color 0.2s;
+}
+.framing-chip.ok { background: rgba(123, 216, 200, 0.28); color: #1F7A68; }
+.framing-hint { font-size: 13px; color: var(--ink-soft); margin-bottom: 12px; min-height: 18px; }
+
 /* --------------------------------------------------------------- results */
 
 .result-hero { text-align: center; padding: 14px 0 4px; }

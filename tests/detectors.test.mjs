@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   LM, SIGNALS, buildFrame, angleAt, distanceToLine, visibilityOf,
   createRepCounter, createExerciseTracker, TIER, tierFor, tierSatisfies,
+  createPoseGate, framingReport,
 } from '../js/detectors.js';
 import {
   EXERCISES, ROUTINES, EXERCISE_BY_ID, POSITIONS, VIEWS,
@@ -12,7 +13,7 @@ import {
 import { rankFor, streak, LEVEL_TITLES } from '../js/store.js';
 import { mapFromRotated, ROTATIONS } from '../js/pose.js';
 import { LEVELS, WORLDS, levelView, levelReps, isUnlocked, nextLevel } from '../js/levels.js';
-import { comboMultiplier, starsFor, isHit, targetFor } from '../js/game.js';
+import { comboMultiplier, starsFor, isHit, targetFor, orbCoords, liftSide } from '../js/game.js';
 
 /* ------------------------------------------------------------ fake bodies */
 
@@ -414,10 +415,40 @@ test('a hips-to-feet view still produces a usable body frame', () => {
   assert.ok(agreement > 0.95, `pelvis frame points the wrong way (dot ${agreement})`);
 });
 
-test('no hips means no frame', () => {
-  assert.equal(buildFrame(hide(body(), [LM.L_HIP, LM.R_HIP])), null);
-  // Hips but nothing to orient against either.
+test('with no hips in shot, the shins still give a frame', () => {
+  // Pointing the phone at your own feet from a chair: no torso, no hips, just
+  // legs. Enough for joint-angle moves like toe points.
+  const feetOnly = buildFrame(hide(body(), [...SHOULDERS, LM.L_HIP, LM.R_HIP]));
+  assert.ok(feetOnly, 'knees and ankles should be enough for a limb frame');
+  assert.equal(feetOnly.tier, TIER.LIMB);
+  assert.ok(feetOnly.scale > 0.2, `limb scale looks wrong: ${feetOnly.scale}`);
+
+  // Lose the legs as well and there is genuinely nothing to work with.
+  assert.equal(buildFrame(hide(body(), [...SHOULDERS, LM.L_HIP, LM.R_HIP, LM.L_KNEE, LM.R_KNEE])), null);
+  // Hips visible but nothing to orient against.
   assert.equal(buildFrame(hide(body(), [...SHOULDERS, LM.L_KNEE, LM.R_KNEE])), null);
+});
+
+test('toe points count with only the feet in shot', () => {
+  // The exact case that failed on the phone: ankle pumps, feet only.
+  const tracker = createExerciseTracker(EXERCISE_BY_ID['ankle-pumps']);
+  const feetOnly = (lms) => hide(lms, [...SHOULDERS, LM.L_HIP, LM.R_HIP]);
+  let t = 0;
+  for (let i = 0; i < 24; i++) { t += 33; tracker.update(feetOnly(body()), t, true); }
+
+  const PUMPS = 8;
+  for (let r = 0; r < PUMPS; r++) {
+    for (let f = 0; f < 18; f++) {
+      // Toes swing from pointed to pulled back, pivoting at the ankle.
+      const point = Math.sin((f / 18) * Math.PI) * 0.05;
+      const lm = body({
+        [LM.L_FOOT]: [0.47, 0.93 + point], [LM.R_FOOT]: [0.53, 0.93 + point],
+      });
+      t += 33;
+      tracker.update(feetOnly(lm), t);
+    }
+  }
+  assert.ok(tracker.counter.reps >= PUMPS - 1, `only counted ${tracker.counter.reps} of ${PUMPS} toe points`);
 });
 
 test('locked head-ward survives knees coming above the hips', () => {
@@ -524,7 +555,10 @@ test('moves that need your torso are only ever propped-phone moves', () => {
 });
 
 test('every move declares a camera setup, zones and a sane target', () => {
-  const JOINTS = new Set(['L_ANKLE', 'R_ANKLE', 'L_KNEE', 'R_KNEE', 'L_WRIST', 'R_WRIST']);
+  const JOINTS = new Set([
+    'L_ANKLE', 'R_ANKLE', 'L_KNEE', 'R_KNEE', 'L_WRIST', 'R_WRIST',
+    'L_SHOULDER', 'R_SHOULDER', 'L_HIP', 'R_HIP', 'L_FOOT', 'R_FOOT',
+  ]);
   for (const ex of EXERCISES) {
     assert.ok(VIEWS[ex.view], `${ex.id}: unknown view ${ex.view}`);
     assert.ok(ex.zones?.length, `${ex.id}: no muscle zones tagged`);
@@ -621,4 +655,128 @@ test('quick-play routines also keep one camera setup', () => {
     const views = new Set(r.moves.map(([id]) => EXERCISE_BY_ID[id].view));
     assert.equal(views.size, 1, `${r.id} mixes camera setups: ${[...views].join(', ')}`);
   }
+});
+
+/* ------------------------------------------------------- plausibility gate */
+
+/** Shifts and scales a whole body, the way a different detection would sit. */
+function moveBody(lms, { dx = 0, dy = 0, scale = 1, cx = 0.5, cy = 0.5 } = {}) {
+  return lms.map((p) => ({
+    ...p,
+    x: cx + (p.x - cx) * scale + dx,
+    y: cy + (p.y - cy) * scale + dy,
+  }));
+}
+
+const settle = (gate, lms, frames = 4, t0 = 0) => {
+  let out;
+  for (let i = 0; i < frames; i++) out = gate.check(buildFrame(lms), t0 + i * 33, LEGS_NEEDED);
+  return out;
+};
+const LEGS_NEEDED = [LM.L_HIP, LM.R_HIP, LM.L_KNEE, LM.R_KNEE, LM.L_ANKLE, LM.R_ANKLE];
+
+test('the gate makes a new body prove itself before trusting it', () => {
+  const gate = createPoseGate();
+  const frame = buildFrame(body());
+  // One good-looking frame is not enough — a hallucination looks fine for a frame.
+  assert.equal(gate.check(frame, 0, LEGS_NEEDED).ok, false);
+  assert.equal(gate.check(frame, 33, LEGS_NEEDED).ok, false);
+  assert.equal(gate.check(frame, 66, LEGS_NEEDED).ok, true, 'three steady frames should lock on');
+});
+
+test('the gate rejects a body that teleports across the room', () => {
+  // This is the actual bug from the phone: the model found a person standing by
+  // a chair while her real leg was elsewhere, and the app drew and scored it.
+  const gate = createPoseGate();
+  const real = body();
+  settle(gate, real);
+
+  const elsewhere = moveBody(real, { dx: 0.45, dy: -0.2 });
+  const verdict = gate.check(buildFrame(elsewhere), 200, LEGS_NEEDED);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, 'jumped');
+
+  // The real body carrying on as normal is still fine.
+  assert.equal(gate.check(buildFrame(moveBody(real, { dx: 0.02 })), 233, LEGS_NEEDED).ok, true);
+});
+
+test('the gate rejects a body too small to be in the room with you', () => {
+  const gate = createPoseGate();
+  const distant = moveBody(body(), { scale: 0.18 });
+  const verdict = gate.check(buildFrame(distant), 0, LEGS_NEEDED);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, 'tiny');
+});
+
+test('the gate rejects joints pinned outside the picture', () => {
+  const gate = createPoseGate();
+  const offscreen = body({ [LM.L_ANKLE]: [1.4, 0.9], [LM.R_ANKLE]: [1.5, 0.9] });
+  const verdict = gate.check(buildFrame(offscreen), 0, LEGS_NEEDED);
+  assert.equal(verdict.ok, false);
+  assert.equal(verdict.reason, 'offscreen');
+});
+
+test('the gate lets go after a gap, so you can move and be found again', () => {
+  const gate = createPoseGate();
+  const real = body();
+  settle(gate, real);
+  // A second later, in a completely different place: treated as a fresh body,
+  // which has to settle again rather than being accepted or refused forever.
+  const far = buildFrame(moveBody(real, { dx: 0.4 }));
+  assert.equal(gate.check(far, 2000, LEGS_NEEDED).ok, false, 'must re-settle, not snap on');
+  gate.check(far, 2033, LEGS_NEEDED);
+  assert.equal(gate.check(far, 2066, LEGS_NEEDED).ok, true, 'and then it locks on again');
+});
+
+test('a rejected pose never counts a rep', () => {
+  const tracker = createExerciseTracker(EXERCISE_BY_ID['knee-tucks']);
+  let t = 0;
+  // A body that jumps around the frame every frame — exactly what a hallucinated
+  // detection does — should never score, however much the signal swings.
+  for (let i = 0; i < 60; i++) {
+    const jumpy = moveBody(
+      body({ [LM.L_KNEE]: [0.45, i % 2 ? 0.42 : 0.72], [LM.R_KNEE]: [0.55, i % 2 ? 0.42 : 0.72] }),
+      { dx: i % 2 ? 0.4 : -0.4 }
+    );
+    t += 33;
+    tracker.update(jumpy, t);
+  }
+  assert.equal(tracker.counter.reps, 0, 'a teleporting body scored reps');
+});
+
+test('every move has something to pop', () => {
+  // The first real test session was spent on a level with no orbs in it. A move
+  // with nothing to aim at reads as broken, so this is now a hard rule.
+  for (const ex of EXERCISES) {
+    assert.ok(ex.target, `${ex.id} has no orb target`);
+  }
+});
+
+test('anchored orbs stay put while the joint they follow moves', () => {
+  // Bridges are the awkward case: the hips both do the work and define the
+  // coordinate system, so an orb placed relative to the hips would ride along
+  // with them and never be reachable.
+  // Knees bent up off the body line, feet planted — the bridge start position.
+  const KNEES = { [LM.L_KNEE]: [0.62, 0.66], [LM.R_KNEE]: [0.66, 0.70] };
+  const flat = buildFrame(body(KNEES));
+  const lifted = buildFrame(body({
+    ...KNEES,
+    [LM.L_HIP]: [0.56, 0.55], [LM.R_HIP]: [0.66, 0.55],   // hips pushed toward the knees' side
+  }));
+  const spec = EXERCISE_BY_ID['glute-bridge'].target;
+  assert.equal(spec.anchor, 'shoulderKneeMid');
+
+  const orb = { ...targetFor(spec, { along: 0, across: 0 }, 'L_HIP'), liftSide: liftSide(flat) };
+  const restingHipGap = Math.hypot(
+    flat.along(flat.hipMid) - orbCoords(orb, flat).along,
+    flat.across(flat.hipMid) - orbCoords(orb, flat).across
+  );
+  const liftedHipGap = Math.hypot(
+    lifted.along(lifted.hipMid) - orbCoords(orb, lifted).along,
+    lifted.across(lifted.hipMid) - orbCoords(orb, lifted).across
+  );
+  assert.ok(
+    liftedHipGap < restingHipGap,
+    `lifting the hips must close the gap to the orb (${restingHipGap} → ${liftedHipGap})`
+  );
 });
