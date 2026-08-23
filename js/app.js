@@ -335,6 +335,14 @@ async function boot() {
 
   ui.scrim.onclick = closeDrawers;
 
+  // Belt and braces with sw.js: if the old caching worker is still registered
+  // on this device, tear it down from here too. Without this, a phone that had
+  // the previous build added to its home screen can keep serving files that no
+  // longer exist.
+  navigator.serviceWorker?.getRegistrations?.()
+    .then((regs) => regs.forEach((r) => r.unregister()))
+    .catch(() => { /* not supported, or nothing registered */ });
+
   // The launch screen shows only while something is actually loading. No
   // artificial delay — if everything is already in memory it goes straight
   // through, which is what she asked for.
