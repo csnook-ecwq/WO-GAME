@@ -6,7 +6,7 @@
  */
 
 import * as store from './store.js';
-import { createBuddy, greeting } from './buddy.js';
+import { createBuddy, greeting, auraEnergy } from './buddy.js';
 import { pickAffirmation } from './affirmations.js';
 
 const h = (tag, cls, text) => {
@@ -43,16 +43,21 @@ function faceEl(p, size) {
 export function renderLaunch() {
   const s = h('section', 'screen launch');
   const wrap = h('div', 'launch-inner');
-  const canvas = h('canvas', 'launch-buddy');
-  const name = h('div', 'launch-name', 'bubble');
-  wrap.append(canvas, name);
+
+  // The wordmark: "aureen" with a bubble centred behind it and the aura behind
+  // that. The creature draws the bubble and the aura for free, so the logo and
+  // the character are literally the same asset.
+  const mark = h('div', 'wordmark');
+  const canvas = h('canvas', 'wordmark-aura');
+  const word = h('div', 'wordmark-word', 'aureen');
+  mark.append(canvas, word);
+
+  const by = h('div', 'launch-by', 'by Reyn Cheyn');
+  wrap.append(mark, by);
   s.appendChild(wrap);
 
-  const buddy = createBuddy(canvas);
-  requestAnimationFrame(() => {
-    buddy.start();
-    buddy.play('bounce');
-  });
+  const buddy = createBuddy(canvas, { mood: 'content', energy: 1, logo: true });
+  requestAnimationFrame(() => buddy.start());
   s.addEventListener('screen:leave', () => buddy.stop());
   return s;
 }
@@ -195,33 +200,54 @@ export function renderHome(profileId, ctl) {
   stage.appendChild(canvas);
   s.appendChild(stage);
 
-  const buddy = createBuddy(canvas, { mood: g.mood });
+  // The aura is the only thing on this screen that comments on how she's doing,
+  // and it does it without a number: bright if she moved today, dim after a gap.
+  const dots = store.weekDots(profileId);
+  const today = (new Date().getDay() + 6) % 7;
+  const buddy = createBuddy(canvas, {
+    mood: g.mood,
+    energy: auraEnergy(dots, today),
+  });
   requestAnimationFrame(() => {
     buddy.start();
     buddy.play(g.anim);
   });
   s.addEventListener('screen:leave', () => buddy.stop());
-  stage.onclick = () => buddy.playRandom();
+  // A tap is a poke — pure impulse, so tapping repeatedly wobbles her more
+  // rather than restarting an animation each time.
+  stage.onpointerdown = () => {
+    buddy.poke();
+    if (Math.random() < 0.25) buddy.playRandom();
+  };
 
-  // Streak and week — adults only.
+  // One baseline: streak, this week, suds. Small-caps label type throughout, so
+  // it reads as a quiet status line rather than three competing weights.
   //
-  // A streak punishes a four-year-old for a week her mother didn't have time
-  // for. Her showing up isn't in her control, so it isn't something she gets to
-  // fail at. She collects achievements instead, for things she actually did.
+  // Streaks are adults only. A streak punishes a four-year-old for a week her
+  // mother didn't have time for — her showing up isn't in her control, so it
+  // isn't something she gets to fail at. Suds she earns herself, so she keeps
+  // those.
+  const status = h('div', 'status rise rise-2');
+
   if (!p.kid) {
-    const streakRow = h('div', 'streak rise rise-2');
     const n = p.streak || 0;
-    streakRow.appendChild(h('b', null, n === 1 ? '1 day' : `${n} days`));
-    const dots = h('div', 'week-dots');
-    store.weekDots(profileId).forEach((v) => {
+    status.appendChild(h('span', 'status-item', n === 1 ? '1 day' : `${n} days`));
+
+    const week = h('div', 'week-dots');
+    dots.forEach((v) => {
       const d = h('i');
-      if (v > 0) d.style.opacity = String(0.4 + v * 0.6);
+      if (v > 0) d.style.opacity = String(0.45 + v * 0.55);
       d.dataset.on = v > 0 ? '1' : '0';
-      dots.appendChild(d);
+      week.appendChild(d);
     });
-    streakRow.appendChild(dots);
-    s.appendChild(streakRow);
+    status.appendChild(week);
   }
+
+  const sudsEl = h('span', 'status-item status-suds');
+  sudsEl.append(h('b', null, String(store.suds(profileId))), h('span', null, 'suds'));
+  status.appendChild(sudsEl);
+
+  s.appendChild(status);
 
   // mode cards
   const modes = h('div', 'modes rise rise-3');
@@ -355,6 +381,29 @@ export function renderSettings(profileId, ctl) {
   av.box.appendChild(row('Aura', slider));
   scroll.appendChild(av.wrap);
 
+  /* --- your buddy: naming lives here, and is never forced at setup */
+  const bud = section('Your buddy');
+  const nameRow = h('div', 'buddy-name-row');
+  const nameField = h('input');
+  nameField.type = 'text';
+  nameField.maxLength = 14;
+  nameField.className = 'set-input buddy-name-input';
+  nameField.placeholder = 'not named yet';
+  nameField.value = p.buddyName || '';
+  nameField.onchange = () => {
+    store.updateProfile(profileId, { buddyName: nameField.value.trim() || null });
+  };
+  const roll = h('button', 'btn btn-glass roll-btn', 'Roll one');
+  roll.onclick = () => {
+    nameField.value = store.rollBuddyName();
+    store.updateProfile(profileId, { buddyName: nameField.value });
+  };
+  nameRow.append(nameField, roll);
+  bud.box.append(row('Name', null), nameRow);
+  bud.box.appendChild(h('p', 'set-note faint',
+    `Your avatar is always ${store.avatarName(p.name)}.`));
+  scroll.appendChild(bud.wrap);
+
   /* --- data */
   const data = section('Your data');
   const note = h('p', 'set-note faint',
@@ -364,6 +413,14 @@ export function renderSettings(profileId, ctl) {
   exportBtn.onclick = () => ctl.exportAll();
   data.box.appendChild(exportBtn);
   scroll.appendChild(data.wrap);
+
+  /* --- about */
+  const about = section('About');
+  about.box.append(
+    row('aureen', h('span', 'faint', 'prototype')),
+    row('Made by', h('span', 'faint', 'Reyn Cheyn Inc.'))
+  );
+  scroll.appendChild(about.wrap);
 
   s.appendChild(scroll);
   return s;

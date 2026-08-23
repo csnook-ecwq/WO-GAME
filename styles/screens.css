@@ -20,14 +20,38 @@
   gap: var(--gap);
   animation: rise-in 0.5s var(--ease) both;
 }
-.launch-buddy { width: 190px; height: 190px; }
-.launch-name {
-  font-size: var(--t-title);
+/* The wordmark: the word sitting in front of a bubble, with the aura behind it.
+   The canvas draws both, so the logo and the creature can never drift apart. */
+.wordmark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 280px;
+  height: 280px;
+}
+.wordmark-aura {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.wordmark-word {
+  position: relative;
+  font-size: 44px;
   font-weight: var(--w-light);
-  letter-spacing: 0.24em;
+  letter-spacing: 0.15em;
+  text-indent: 0.16em;      /* balances the trailing letter-space */
   text-transform: lowercase;
-  color: var(--ink-soft);
-  animation: rise-in 0.6s var(--ease) 0.25s both;
+  color: var(--ink);
+  animation: rise-in 0.34s var(--ease) 0.06s both;
+}
+.launch-by {
+  font-size: var(--t-micro);
+  font-weight: var(--w-regular);
+  letter-spacing: 0.12em;
+  color: var(--ink-faint);
+  margin-top: calc(var(--gap) * -1);
+  animation: rise-in 0.34s var(--ease) 0.16s both;
 }
 
 /* ------------------------------------------------------------------ picker */
@@ -148,13 +172,22 @@
 .home { gap: 0; }
 .home-top { display: flex; justify-content: space-between; }
 
+/* Fixed at two lines whether the line needs them or not. Without this the
+   creature jumps up and down as the affirmation changes length, which is the
+   single most obvious thing wrong with a screen that should feel calm. */
 .affirmation {
   margin: var(--gap-lg) auto 0;
-  max-width: 300px;
+  max-width: 290px;
+  min-height: calc(var(--t-body) * 2.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  text-wrap: balance;
   font-size: var(--t-body);
   font-weight: var(--w-regular);
   line-height: 1.45;
+  letter-spacing: -0.005em;
   color: var(--ink-soft);
 }
 
@@ -165,7 +198,8 @@
   min-height: 0;
   display: grid;
   place-items: center;
-  padding: var(--gap) 0;
+  /* Equal above and below, so she sits optically centred in what is left */
+  padding: var(--gap-sm) 0;
 }
 .home-buddy canvas {
   width: min(88vw, 380px);
@@ -173,14 +207,26 @@
   max-height: 100%;
 }
 
-.streak {
+/* Streak, week and suds on one baseline, one type treatment. */
+.status {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--gap);
-  margin-bottom: var(--gap-lg);
+  margin: var(--gap-sm) 0 var(--gap-lg);
+  font-size: var(--t-micro);
+  font-weight: var(--w-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
-.streak b { font-size: var(--t-label); font-weight: var(--w-medium); color: var(--ink); }
+.status-item { display: flex; align-items: baseline; gap: 5px; }
+.status-suds b {
+  font-size: var(--t-label);
+  font-weight: var(--w-bold);
+  letter-spacing: 0;
+  color: var(--accent);
+}
 .week-dots { display: flex; gap: 7px; }
 .week-dots i {
   width: 8px;
@@ -453,3 +499,7 @@
 .rec-actions { display: flex; gap: var(--gap-sm); }
 .rec-actions .btn { flex: 1; min-height: 46px; font-size: var(--t-label); }
 .rec-check { padding: 4px 2px; }
+
+.buddy-name-row { display: flex; gap: var(--gap-sm); align-items: center; padding-bottom: var(--gap-sm); }
+.buddy-name-input { flex: 1; max-width: none; text-align: left; }
+.roll-btn { min-height: 42px; padding: 0 16px; font-size: var(--t-label); flex: none; }

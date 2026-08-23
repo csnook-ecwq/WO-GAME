@@ -240,7 +240,7 @@ function downloadExport() {
   const blob = new Blob([store.exportAll()], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'bubble-backup.json';
+  a.download = 'aureen-backup.json';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast('Saved a backup file');
@@ -274,7 +274,7 @@ function saveRecoveryImage(code) {
   x.fillStyle = '#2E2430';
   x.textAlign = 'center';
   x.font = '300 30px -apple-system, system-ui, sans-serif';
-  x.fillText('bubble', W / 2, 150);
+  x.fillText('aureen', W / 2, 150);
   x.font = '600 40px -apple-system, system-ui, sans-serif';
   x.fillText('recovery code', W / 2, 208);
 
@@ -289,7 +289,7 @@ function saveRecoveryImage(code) {
     if (!blob) return toast('Could not make the image');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'bubble-recovery.png';
+    a.download = 'aureen-recovery.png';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     toast('Saved — put it somewhere safe');
@@ -349,7 +349,7 @@ async function boot() {
   swap(screens.renderLaunch());
   store.requestPersistence();
 
-  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 420)));
+  await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 620)));
 
   if (!store.profiles().length) return go('onboard');
   go('picker');

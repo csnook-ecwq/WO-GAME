@@ -1,7 +1,7 @@
 {
-  "name": "bubble",
-  "short_name": "bubble",
-  "description": "Workouts you do lying down, a body journal that's yours alone, and bubble games with your kids.",
+  "name": "aureen",
+  "short_name": "aureen",
+  "description": "A game you play on the floor with your kids that quietly builds your glutes and core.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -38,6 +38,51 @@ export const BUDDY_KINDS = [
   { id: 'pet', name: 'Pet', hint: 'Something to keep you company' },
 ];
 
+/* ------------------------------------------------------------ buddy naming
+ *
+ * The creature has no name until its owner gives it one. The roller combines two
+ * syllable lists rather than picking from a fixed list, so it never runs dry and
+ * everything it produces is short, soft and sayable by a four-year-old — with no
+ * real meaning to get wrong.
+ */
+
+const NAME_HEAD = [
+  'Pip', 'Nub', 'Mo', 'Ol', 'Sud', 'Bo', 'Lu', 'Ti', 'Bub', 'Wob',
+  'Fiz', 'Pud', 'Gli', 'Dot', 'Plu', 'Squi', 'Tof', 'Bim', 'Nim', 'Poo',
+];
+const NAME_TAIL = [
+  '', 'bin', 'mo', 'lo', 'sy', 'po', 'na', 'ly', 'ble', 'ket',
+  'zy', 'dle', 'mp', 'go', 'ffle', 'nk', 'ee', 'bo', 'wa', 'sh',
+];
+
+/** @returns {string} never empty, always capitalised */
+export function rollBuddyName() {
+  const head = NAME_HEAD[Math.floor(Math.random() * NAME_HEAD.length)];
+  const tail = NAME_TAIL[Math.floor(Math.random() * NAME_TAIL.length)];
+  const name = `${head}${tail}`;
+  // A bare head syllable is a perfectly good name (Pip, Mo, Dot), but it must
+  // never come back as an empty string.
+  return name.length ? name[0].toUpperCase() + name.slice(1) : 'Pip';
+}
+
+/** Avatars are always "mini <owner>" — derived, never stored. */
+export function avatarName(profileName) {
+  return `mini ${String(profileName || 'you').trim()}`;
+}
+
+/* ------------------------------------------------------------------- suds
+ *
+ * Points are suds. They are earned by popping and spent on skins, accessories
+ * and venues. Kid profiles earn them too — it is the reward that works for a
+ * four-year-old, who deliberately gets no streak.
+ */
+
+/** Combo multiplier: generous, and capped so a long streak can't run away. */
+export function sudsFor(pops, combo = 0) {
+  const mult = 1 + Math.min(Math.floor(combo / 5) * 0.25, 1.5);
+  return Math.max(0, Math.round(pops * 10 * mult));
+}
+
 const EMPTY = {
   profiles: [],
   friendships: [],
@@ -131,6 +176,11 @@ export function createProfile(input) {
     recovery: null,
     createdAt: Date.now(),
     lastSeenAt: null,
+    // Null until she names it or rolls one. Never named for her at setup — that
+    // is a decision worth letting someone make when they care about it.
+    buddyName: null,
+    suds: 0,
+    sudsLedger: [],
     streak: 0,
     week: [0, 0, 0, 0, 0, 0, 0],
     sessions: [],
@@ -267,6 +317,27 @@ function startOfWeek(now = Date.now()) {
   const day = (d.getDay() + 6) % 7;      // Monday = 0
   d.setDate(d.getDate() - day);
   return d.getTime();
+}
+
+/**
+ * Add or spend suds. Returns the new balance.
+ *
+ * The balance can never go negative — a bug in the shop should refuse a purchase,
+ * not leave someone owing the app money.
+ */
+export function addSuds(id, amount, reason = '') {
+  const p = profile(id);
+  if (!p) return 0;
+  const next = Math.max(0, (p.suds || 0) + Math.round(amount));
+  if (amount < 0 && (p.suds || 0) + amount < 0) return p.suds || 0;
+  p.suds = next;
+  p.sudsLedger = [{ at: Date.now(), amount: Math.round(amount), reason }, ...(p.sudsLedger || [])].slice(0, 100);
+  save();
+  return p.suds;
+}
+
+export function suds(id) {
+  return profile(id)?.suds || 0;
 }
 
 export function addActivity(entry) {
