@@ -1,132 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-scheme="coral" data-type="adult">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<title>Aura — the lying-down game</title>
-<meta name="description" content="A game you play lying down. Pop glowing orbs with your feet and watch your own aura light up." />
-<meta name="theme-color" content="#FDF7F9" />
+<title>bubble</title>
+<meta name="description" content="Workouts you do lying down, a body journal that's yours alone, and bubble games with your kids." />
+<meta name="theme-color" content="#FDF6F3" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Aura" />
+<meta name="apple-mobile-web-app-title" content="bubble" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="assets/icon.svg" />
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles/tokens.css" />
+<link rel="stylesheet" href="styles/base.css" />
+<link rel="stylesheet" href="styles/components.css" />
+<link rel="stylesheet" href="styles/screens.css" />
 </head>
-<body>
+<body data-plain="0">
 
-<!-- Who's playing -->
-<section id="gate" class="gate" hidden>
-  <div class="gate-inner">
-    <div class="brand"><span class="brand-mark">✦</span><span class="brand-name">aura</span></div>
-    <h1 class="gate-title">Who's playing?</h1>
-    <div class="player-grid" id="playerGrid"></div>
-    <form class="new-player glass" id="newPlayer" hidden>
-      <label class="field">
-        <span>Name</span>
-        <input id="newName" type="text" maxlength="14" autocomplete="off" placeholder="Your name" required />
-      </label>
-      <div class="field">
-        <span>Colour</span>
-        <div class="swatches" id="newColors"></div>
-      </div>
-      <label class="check">
-        <input id="newKid" type="checkbox" />
-        <span>This is a kid's profile<small>Keeps the body journal off this profile entirely</small></span>
-      </label>
-      <div class="row">
-        <button type="button" class="btn btn-ghost" id="newCancel">Cancel</button>
-        <button type="submit" class="btn btn-primary">Create</button>
-      </div>
-    </form>
-  </div>
-</section>
+<div class="mesh" aria-hidden="true"><i></i><i></i></div>
 
-<!-- Main app -->
-<div id="app" hidden>
-  <header class="topbar glass" id="topbar">
-    <button class="icon-btn" id="backBtn" aria-label="Back" hidden>‹</button>
-    <div class="topbar-brand"><span class="brand-mark">✦</span><span class="brand-name">aura</span></div>
-    <button class="who" id="whoBtn" aria-label="Switch player"><span id="whoDot" class="who-dot"></span><span id="whoName">—</span></button>
-  </header>
-
-  <main id="screen" class="screen" tabindex="-1"></main>
-
-  <nav class="tabbar glass" id="tabbar">
-    <button class="tab is-active" data-route="map"><span>✧</span>Play</button>
-    <button class="tab" data-route="free"><span>◔</span>Quick</button>
-    <button class="tab" data-route="me"><span>◕</span>You</button>
-  </nav>
+<div id="app">
+  <main id="stage" class="stage"></main>
 </div>
 
-<!-- The game itself -->
-<section id="game" class="game" hidden>
-  <video id="video" class="game-video" playsinline muted autoplay></video>
-  <canvas id="stage" class="game-stage"></canvas>
+<div id="scrim" class="scrim" data-open="0"></div>
+<aside id="drawerLeft" class="drawer drawer-left" data-open="0"></aside>
+<aside id="drawerRight" class="drawer drawer-right" data-open="0"></aside>
 
-  <div class="game-ui">
-    <div class="game-top">
-      <button class="icon-btn glass" id="gameQuit" aria-label="Finish">✕</button>
-      <div class="game-title">
-        <div class="game-move" id="gameMove">—</div>
-        <div class="game-step" id="gameStep">1 of 1</div>
-      </div>
-      <button class="icon-btn glass" id="gameCamera" aria-pressed="false" aria-label="Show the room">◉</button>
-    </div>
-
-    <div class="score-row">
-      <div class="score glass"><b id="gameScore">0</b><span>aura</span></div>
-      <div class="combo" id="gameCombo"></div>
-    </div>
-
-    <div class="game-coach glass" id="gameCoach" hidden></div>
-
-    <div class="game-middle"><div class="countdown" id="gameCountdown" hidden></div></div>
-
-    <div class="game-bottom">
-      <div class="reps"><span id="gameReps">0</span><small id="gameRepTarget">/ 0</small></div>
-      <div class="reps-bar"><i id="gameBar"></i></div>
-      <div class="game-actions">
-        <button class="pill glass" id="gamePause">Pause</button>
-        <button class="pill pill-solid" id="gameManual">+1</button>
-        <button class="pill glass" id="gameSkip">Skip</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="stats" id="gameStats" hidden></div>
-
-  <div class="framing" id="gameFraming" hidden>
-    <div class="framing-card glass">
-      <b id="framingTitle">Get in frame</b>
-      <small id="framingSetup"></small>
-      <div class="framing-list" id="framingList"></div>
-      <p class="framing-hint" id="framingHint">Point the camera at yourself</p>
-      <p class="framing-tap" id="framingTap" hidden>Glowing on the wrong thing? Tap yourself.</p>
-      <button class="pill glass" id="framingSkip">Start anyway</button>
-    </div>
-  </div>
-
-  <div class="veil" id="gameRest" hidden>
-    <div class="veil-card glass">
-      <div class="veil-label">Rest</div>
-      <div class="veil-big" id="gameRestTimer">12</div>
-      <div class="veil-sub" id="gameRestNext">—</div>
-      <button class="btn btn-primary" id="gameRestSkip">Skip rest</button>
-    </div>
-  </div>
-
-  <div class="veil" id="gameLoading">
-    <div class="veil-card glass">
-      <div class="loader"></div>
-      <p id="gameLoadingText">Waking up the camera…</p>
-      <button class="btn btn-ghost" id="gameLoadingCancel">Cancel</button>
-    </div>
-  </div>
-</section>
-
-<div id="toast" class="toast glass" hidden></div>
+<div id="toast" class="toast" data-show="0"></div>
 
 <script type="module" src="js/app.js"></script>
 </body>

@@ -1,14 +1,14 @@
 {
-  "name": "Aura — the lying-down game",
-  "short_name": "Aura",
-  "description": "A game you play lying down. Pop glowing orbs with your feet and watch your own aura light up.",
+  "name": "bubble",
+  "short_name": "bubble",
+  "description": "Workouts you do lying down, a body journal that's yours alone, and bubble games with your kids.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FDF7F9",
-  "theme_color": "#FDF7F9",
-  "categories": ["health", "fitness", "games"],
+  "background_color": "#FDF6F3",
+  "theme_color": "#FDF6F3",
+  "categories": ["health", "fitness", "lifestyle"],
   "icons": [
     { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "assets/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }

@@ -1,0 +1,131 @@
+/**
+ * base.css — reset, the page itself, and the mesh gradient.
+ *
+ * The gradient is four soft radial blobs drifting very slowly. It belongs to
+ * the home screen and the profile picker only; reading screens (journal,
+ * progress, settings) get the plain background so the gradient never fights
+ * text you are actually trying to read.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--font);
+  font-size: var(--t-body);
+  font-weight: var(--w-regular);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  user-select: none;
+}
+
+button, input, textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+[hidden] { display: none !important; }
+
+h1, h2, h3, p { margin: 0; }
+
+/* ------------------------------------------------------------ the gradient */
+
+.mesh {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Four blobs. Each drifts on its own slow cycle so the field never repeats in
+   a way you can spot, and none of them moves fast enough to be distracting. */
+.mesh::before,
+.mesh::after,
+.mesh > i {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  will-change: transform;
+}
+
+.mesh::before {
+  width: 78vw; height: 78vw;
+  top: -22vw; left: -18vw;
+  background: var(--g1);
+  animation: drift-a 34s var(--ease) infinite alternate;
+}
+.mesh::after {
+  width: 66vw; height: 66vw;
+  top: 12vh; right: -22vw;
+  background: var(--g2);
+  animation: drift-b 41s var(--ease) infinite alternate;
+}
+.mesh > i:nth-child(1) {
+  width: 72vw; height: 72vw;
+  bottom: -20vw; left: -10vw;
+  background: var(--g3);
+  animation: drift-c 47s var(--ease) infinite alternate;
+}
+.mesh > i:nth-child(2) {
+  width: 54vw; height: 54vw;
+  bottom: 6vh; right: -12vw;
+  background: var(--g4);
+  animation: drift-d 39s var(--ease) infinite alternate;
+}
+
+@keyframes drift-a { to { transform: translate3d(9vw, 7vh, 0) scale(1.12); } }
+@keyframes drift-b { to { transform: translate3d(-11vw, 9vh, 0) scale(1.08); } }
+@keyframes drift-c { to { transform: translate3d(8vw, -8vh, 0) scale(1.14); } }
+@keyframes drift-d { to { transform: translate3d(-7vw, -6vh, 0) scale(1.1); } }
+
+/* Reading screens hide the gradient entirely rather than dimming it. */
+body[data-plain="1"] .mesh > i,
+body[data-plain="1"] .mesh::before,
+body[data-plain="1"] .mesh::after { opacity: 0; }
+.mesh > i, .mesh::before, .mesh::after { transition: opacity 0.4s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mesh > i, .mesh::before, .mesh::after { animation: none; }
+}
+
+/* --------------------------------------------------------------- the stage */
+
+#app {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + var(--gap)) var(--gap)
+           calc(var(--safe-bottom) + var(--gap));
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}

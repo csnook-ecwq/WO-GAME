@@ -1,0 +1,253 @@
+/**
+ * components.css — the pieces every screen is built from.
+ *
+ * The one rule worth stating: text over glass is the known risk of this whole
+ * visual direction. Every label here sits on --glass-strong or has enough ink
+ * contrast to survive a pale gradient behind it.
+ */
+
+/* ----------------------------------------------------------------- surfaces */
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-soft);
+}
+
+.card {
+  border-radius: var(--r-lg);
+  padding: var(--gap);
+}
+
+/* ------------------------------------------------------------------ buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-xs);
+  min-height: 52px;
+  padding: 0 var(--gap-lg);
+  border-radius: var(--r-full);
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+  transition: transform 0.16s var(--ease), opacity 0.16s var(--ease);
+}
+.btn:active { transform: scale(0.97); }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+
+.btn-primary {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: var(--shadow-lift);
+}
+.btn-accent {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-lift);
+}
+.btn-glass {
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-edge);
+  color: var(--ink);
+}
+.btn-quiet {
+  color: var(--ink-soft);
+  font-weight: var(--w-regular);
+}
+.btn-wide { width: 100%; }
+
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-full);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  color: var(--ink);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-edge);
+  transition: transform 0.16s var(--ease);
+}
+.icon-btn:active { transform: scale(0.92); }
+
+/* -------------------------------------------------------------------- chips */
+
+.chips {
+  display: flex;
+  gap: var(--gap-sm);
+  flex-wrap: wrap;
+}
+.chip {
+  padding: 9px 16px;
+  border-radius: var(--r-full);
+  font-size: var(--t-label);
+  font-weight: var(--w-medium);
+  color: var(--ink-soft);
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  transition: color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.chip[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--glass-strong);
+}
+
+/* --------------------------------------------------------------- typography */
+
+.label {
+  font-size: var(--t-micro);
+  font-weight: var(--w-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.title {
+  font-size: var(--t-title);
+  font-weight: var(--w-medium);
+  letter-spacing: -0.01em;
+}
+.hero {
+  font-size: var(--t-hero);
+  font-weight: var(--w-bold);
+  letter-spacing: -0.02em;
+}
+.soft { color: var(--ink-soft); }
+.faint { color: var(--ink-faint); }
+.center { text-align: center; }
+
+/* -------------------------------------------------------------- the drawers */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(30, 22, 36, 0.18);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s var(--ease);
+}
+.scrim[data-open="1"] { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 41;
+  width: 76%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + var(--gap-lg)) var(--gap)
+           calc(var(--safe-bottom) + var(--gap));
+  /* Lighter than a normal glass card on purpose: the buddy should still be
+     visible behind it, dimmed, so you know where you are. */
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  transition: transform 0.34s var(--ease);
+}
+.drawer-left {
+  left: 0;
+  border-right: 1px solid var(--glass-edge);
+  border-radius: 0 var(--r-xl) var(--r-xl) 0;
+  transform: translate3d(-102%, 0, 0);
+}
+.drawer-right {
+  right: 0;
+  border-left: 1px solid var(--glass-edge);
+  border-radius: var(--r-xl) 0 0 var(--r-xl);
+  transform: translate3d(102%, 0, 0);
+}
+.drawer[data-open="1"] { transform: translate3d(0, 0, 0); }
+
+.menu { display: flex; flex-direction: column; gap: 2px; margin-top: var(--gap); }
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 14px var(--gap);
+  border-radius: var(--r-md);
+  font-size: var(--t-body);
+  font-weight: var(--w-regular);
+  color: var(--ink);
+  text-align: left;
+  width: 100%;
+  transition: background 0.2s var(--ease);
+}
+.menu-item[aria-current="page"] { background: var(--accent-soft); font-weight: var(--w-medium); }
+.menu-item .ico {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+  flex: none;
+}
+.menu-item[aria-current="page"] .ico { color: var(--accent); }
+
+.menu-foot {
+  margin-top: auto;
+  padding-top: var(--gap);
+  border-top: 1px solid var(--glass-edge);
+}
+
+/* --------------------------------------------------------------- avatar bits */
+
+.face {
+  border-radius: var(--r-full);
+  object-fit: cover;
+  background: var(--accent-soft);
+  display: grid;
+  place-items: center;
+  font-weight: var(--w-bold);
+  color: var(--accent);
+  overflow: hidden;
+  flex: none;
+}
+
+/* ------------------------------------------------------------------- toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 22px);
+  transform: translate(-50%, 12px);
+  z-index: 60;
+  padding: 12px 20px;
+  border-radius: var(--r-full);
+  font-size: var(--t-label);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s var(--ease), transform 0.24s var(--ease);
+}
+.toast[data-show="1"] { opacity: 1; transform: translate(-50%, 0); }
+
+/* ------------------------------------------------------------------ motion */
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+.rise { animation: rise-in 0.4s var(--ease) both; }
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.11s; }
+.rise-3 { animation-delay: 0.17s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+  .drawer, .scrim { transition: none; }
+}

@@ -1,0 +1,159 @@
+/**
+ * tokens.css — every colour, size and shadow in the app resolves from here.
+ *
+ * Two axes, and they are independent:
+ *
+ *   data-scheme  the colour scheme the user picked in settings. Changing it
+ *                recolours the entire app, including the mesh gradient, from
+ *                this one block. A new scheme is a short list of values, not a
+ *                redesign.
+ *   data-type    "adult" or "kid". Adult gets the small, light typography from
+ *                the reference screenshots. Kid scales everything up and
+ *                switches to a rounder, heavier face, because Renni is four and
+ *                the words stay visible so she learns them.
+ */
+
+:root {
+  /* ---- shape. Large radii and very soft, wide shadows: the references have
+     almost no visible shadow at all, just a suggestion of lift. */
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 26px;
+  --r-xl: 34px;
+  --r-full: 999px;
+
+  --shadow-soft: 0 10px 30px rgba(40, 30, 50, 0.06);
+  --shadow-lift: 0 18px 44px rgba(40, 30, 50, 0.10);
+
+  /* ---- glass. Translucent white over whatever is behind, with a hairline
+     edge so the card still reads on a plain background where there is no
+     gradient to blur. */
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-strong: rgba(255, 255, 255, 0.74);
+  --glass-edge: rgba(255, 255, 255, 0.65);
+  --glass-blur: 18px;
+
+  /* ---- spacing */
+  --gap-xs: 6px;
+  --gap-sm: 10px;
+  --gap: 16px;
+  --gap-lg: 24px;
+  --gap-xl: 34px;
+
+  /* ---- safe areas */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ---- typography: adult by default. Small and light, bold reserved for the
+     one number that matters. */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-round: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+
+  --t-micro: 11px;
+  --t-label: 13px;
+  --t-body: 15px;
+  --t-title: 21px;
+  --t-hero: 30px;
+  --t-huge: 44px;
+
+  --w-light: 300;
+  --w-regular: 400;
+  --w-medium: 500;
+  --w-bold: 700;
+  --w-heavy: 800;
+
+  --track-label: 0.14em;   /* letter-spacing on small uppercase labels */
+}
+
+/* Kid profiles: bigger, rounder, heavier. Same app, one variable block. */
+:root[data-type="kid"] {
+  --font: var(--font-round);
+
+  --t-micro: 14px;
+  --t-label: 17px;
+  --t-body: 20px;
+  --t-title: 27px;
+  --t-hero: 36px;
+  --t-huge: 54px;
+
+  --w-light: 500;
+  --w-regular: 600;
+  --w-medium: 700;
+  --w-bold: 800;
+  --w-heavy: 900;
+
+  --track-label: 0.06em;
+}
+
+/* ------------------------------------------------------------ colour schemes
+ *
+ * g1..g4 are the blobs of the mesh gradient. bg is the plain background used
+ * on reading screens, where the gradient would fight the content.
+ */
+
+:root, :root[data-scheme="coral"] {
+  --g1: #FFD9CF;
+  --g2: #FFC2D4;
+  --g3: #E8D5FF;
+  --g4: #FFF0E6;
+  --bg: #FDF6F3;
+  --accent: #FF8B7A;
+  --accent-soft: #FFE3DC;
+  --ink: #2E2430;
+  --ink-soft: #6C6070;
+  --ink-faint: #A79CAB;
+}
+
+:root[data-scheme="teal"] {
+  --g1: #CFF0EC;
+  --g2: #C7E4F5;
+  --g3: #DCEFFF;
+  --g4: #EAF9F6;
+  --bg: #F3FAFA;
+  --accent: #4FC4B8;
+  --accent-soft: #D8F2EE;
+  --ink: #1F3538;
+  --ink-soft: #566C6E;
+  --ink-faint: #93A7A8;
+}
+
+:root[data-scheme="apricot"] {
+  --g1: #FFE2C7;
+  --g2: #FFD3B0;
+  --g3: #FFE0EC;
+  --g4: #FFF4E8;
+  --bg: #FEF8F2;
+  --accent: #FF9E5E;
+  --accent-soft: #FFE7D3;
+  --ink: #33261C;
+  --ink-soft: #6E5D4F;
+  --ink-faint: #AA9A8B;
+}
+
+:root[data-scheme="mint"] {
+  --g1: #D6F5E0;
+  --g2: #C9EFD8;
+  --g3: #DDF1FF;
+  --g4: #FFFBEC;
+  --bg: #F4FBF6;
+  --accent: #57C98A;
+  --accent-soft: #DAF4E4;
+  --ink: #1F3328;
+  --ink-soft: #566B5D;
+  --ink-faint: #93A79A;
+}
+
+:root[data-scheme="butter"] {
+  --g1: #FFF3C4;
+  --g2: #FFEBB0;
+  --g3: #EAF6FF;
+  --g4: #FFF3E4;
+  --bg: #FFFCF0;
+  --accent: #E8B92E;
+  --accent-soft: #FFF1C6;
+  --ink: #34301F;
+  --ink-soft: #6D6650;
+  --ink-faint: #A9A288;
+}

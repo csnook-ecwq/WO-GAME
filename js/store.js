@@ -1,451 +1,293 @@
 /**
- * store.js — all persistent state, in localStorage. No account, no server.
+ * store.js — profiles and everything saved about them.
  *
- * Everything is per profile: you and anyone else who plays keep separate stars,
- * skins and streaks. Device-wide settings (sound, camera preference) are shared,
- * because they describe the phone rather than the player.
+ * Built account-shaped on purpose: a profile has an id, a name, a picture and
+ * its own everything, and the sign-in screen is a real sign-in screen. There is
+ * simply no server underneath it yet. When there is, this file is the only place
+ * that has to learn about it.
  *
- * A profile can be marked `kid`, which is not decoration: kid profiles never get
- * offered the body journal or anything about appearance.
+ * Nothing here ever leaves the device.
  */
 
-import { LEVELS, totalStars } from './levels.js';
-import { SKIN_IDS, SKINS } from './ghost.js';
+const KEY = 'app.v1';
+const BACKUP = 'app.v1.backup';
+const UNLOCK_MS = 5 * 60 * 1000;   // how long a PIN stays satisfied
 
-const KEY = 'aura.v1';
-const BACKUP_KEY = 'aura.v1.backup';
-const LEGACY_KEY = 'slothmode.v1';
-
-export const PLAYER_COLORS = [
-  '#FF8FB1', '#7BD8C8', '#9BB8FF', '#FFC46B', '#C79BFF', '#7FD1FF',
+/** Words for recovery codes: short, unambiguous, easy to write down. */
+const WORDS = [
+  'apple', 'anchor', 'amber', 'bloom', 'bridge', 'butter', 'cactus', 'candle',
+  'cherry', 'cloud', 'copper', 'daisy', 'dolphin', 'ember', 'feather', 'forest',
+  'garden', 'ginger', 'harbour', 'honey', 'island', 'jelly', 'kettle', 'ladder',
+  'lantern', 'lemon', 'lilac', 'maple', 'meadow', 'mitten', 'nectar', 'ocean',
+  'orbit', 'pebble', 'pepper', 'pillow', 'planet', 'pocket', 'poppy', 'puddle',
+  'ribbon', 'river', 'saddle', 'silver', 'sparrow', 'summer', 'sunset', 'teapot',
+  'thimble', 'tulip', 'velvet', 'walnut', 'willow', 'window', 'yellow', 'zephyr',
 ];
 
-export const LEVEL_TITLES = [
-  { stars: 0, title: 'Just Started', emoji: '🌱' },
-  { stars: 6, title: 'Getting Glowy', emoji: '✨' },
-  { stars: 14, title: 'Regular', emoji: '🌸' },
-  { stars: 24, title: 'Strong', emoji: '💫' },
-  { stars: 34, title: 'Very Strong', emoji: '🌟' },
-  { stars: 44, title: 'Unstoppable', emoji: '👑' },
+export const SCHEMES = [
+  { id: 'coral', name: 'Coral' },
+  { id: 'teal', name: 'Teal' },
+  { id: 'apricot', name: 'Apricot' },
+  { id: 'mint', name: 'Mint' },
+  { id: 'butter', name: 'Butter' },
 ];
 
-export const BADGES = [
-  { id: 'first', name: 'First Glow', emoji: '🌱', desc: 'Finish your first level' },
-  { id: 'streak3', name: 'Three Days', emoji: '🔥', desc: '3 day streak' },
-  { id: 'streak7', name: 'A Whole Week', emoji: '📅', desc: '7 day streak' },
-  { id: 'combo10', name: 'On A Roll', emoji: '⚡', desc: 'A combo of 10' },
-  { id: 'combo25', name: 'Untouchable', emoji: '💎', desc: 'A combo of 25' },
-  { id: 'perfect', name: 'Every Orb', emoji: '🎯', desc: 'Three stars on any level' },
-  { id: 'world1', name: 'First Light', emoji: '🌤️', desc: 'Clear the first world' },
-  { id: 'boss', name: 'Boss Down', emoji: '🏆', desc: 'Beat a boss level' },
-  { id: 'reps500', name: 'Five Hundred', emoji: '🎖️', desc: '500 lifetime reps' },
+export const BUDDY_KINDS = [
+  { id: 'bubble', name: 'Bubble', hint: 'A little creature made of bubbles' },
+  { id: 'avatar', name: 'You', hint: 'A bubbly version of your own face' },
+  { id: 'pet', name: 'Pet', hint: 'Something to keep you company' },
 ];
 
-const emptyProgress = () => ({
-  xp: 0,
-  totalReps: 0,
-  totalSeconds: 0,
-  sessions: [],            // { ts, levelId, reps, score, stars, seconds }
-  levels: {},              // levelId -> { stars, bestScore }
-  badges: [],
-  skin: 'glow',
-  unlockedSkins: ['glow'],
-});
-
-const emptyState = () => ({
+const EMPTY = {
   profiles: [],
-  activeId: null,
-  progress: {},
-  settings: { sound: true, voice: true, showCamera: false, mirror: true, stats: false },
-});
+  friendships: [],
+  activity: [],
+  lastProfileId: null,
+};
 
-let state = emptyState();
-const listeners = new Set();
+let state = load();
+let unlockedUntil = 0;
+let unlockedId = null;
 
-const uid = () => `p${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
+/* ------------------------------------------------------------------ storage */
 
-/* ------------------------------------------------------------------ load */
-
-export function load() {
-  const hydrate = (raw) => {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') throw new Error('not a save');
-    return {
-      ...emptyState(),
-      ...parsed,
-      settings: { ...emptyState().settings, ...(parsed.settings || {}) },
-    };
-  };
-
-  let loaded = null;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) loaded = hydrate(raw);
-  } catch (err) {
-    console.warn('Main save unreadable, trying the backup.', err);
-  }
-  // A second copy, so one bad write or a half-finished parse cannot cost you
-  // months of stars.
-  if (!loaded || !loaded.profiles?.length) {
+function load() {
+  for (const key of [KEY, BACKUP]) {
     try {
-      const backup = localStorage.getItem(BACKUP_KEY);
-      if (backup) {
-        const fromBackup = hydrate(backup);
-        if (fromBackup.profiles?.length) loaded = fromBackup;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.profiles)) {
+        return { ...structuredClone(EMPTY), ...parsed };
       }
-    } catch { /* no usable backup either */ }
-  }
-
-  state = loaded || emptyState();
-  if (!state.profiles.length) migrateLegacy();
-  askToKeepStorage();
-  return state;
-}
-
-/**
- * Ask the browser not to evict this data.
- *
- * iOS in particular clears storage for sites it considers idle, and an installed
- * home-screen app is much likelier to be granted persistence than a tab. Nothing
- * to do if it is refused — this is a request, not a guarantee.
- */
-async function askToKeepStorage() {
-  try {
-    if (navigator.storage?.persist && !(await navigator.storage.persisted())) {
-      await navigator.storage.persist();
+    } catch (err) {
+      console.warn('could not read', key, err);
     }
-  } catch { /* not supported here */ }
-}
-
-/** Where this copy of the app keeps its data — they are separate boxes. */
-export function storageContext() {
-  let standalone = false;
-  try {
-    standalone = window.matchMedia?.('(display-mode: standalone)')?.matches
-      || window.navigator.standalone === true;
-  } catch { /* assume browser */ }
-  return {
-    standalone,
-    label: standalone ? 'the home screen app' : 'this browser',
-  };
-}
-
-/** Carries over progress from the previous version of the app, if any. */
-function migrateLegacy() {
-  let old = null;
-  try { old = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null'); } catch { /* ignore */ }
-  if (!old) return;
-  const id = uid();
-  state = emptyState();
-  state.profiles = [{ id, name: 'Me', color: PLAYER_COLORS[0], kid: false, createdAt: Date.now() }];
-  state.activeId = id;
-  state.progress[id] = {
-    ...emptyProgress(),
-    xp: old.xp || 0,
-    totalReps: old.totalReps || 0,
-    totalSeconds: old.totalSeconds || 0,
-    sessions: (old.sessions || []).map((s) => ({
-      ts: s.ts, levelId: null, reps: s.reps || 0, score: (s.xp || 0) * 10, stars: 0, seconds: s.seconds || 0,
-    })),
-  };
-  state.settings = { ...state.settings, ...(old.settings || {}) };
-  save();
+  }
+  return structuredClone(EMPTY);
 }
 
 function save() {
+  // Never let an empty store overwrite a populated one. This has bitten before:
+  // a failed read early in startup used to wipe real progress on the next write.
   try {
-    const json = JSON.stringify(state);
-    // Never let an empty state overwrite a real one. If something upstream has
-    // gone wrong, losing the write is far better than losing the progress.
-    if (!state.profiles.length) {
-      const existing = localStorage.getItem(KEY);
-      if (existing && existing.length > json.length) {
-        console.warn('Refusing to overwrite saved progress with an empty state.');
+    const existing = localStorage.getItem(KEY);
+    if (existing && !state.profiles.length) {
+      const prev = JSON.parse(existing);
+      if (prev?.profiles?.length) {
+        console.warn('refusing to overwrite a populated store with an empty one');
         return;
       }
     }
-    localStorage.setItem(KEY, json);
-    localStorage.setItem(BACKUP_KEY, json);
-  } catch (err) {
-    console.warn('Could not save progress.', err);
-  }
-  listeners.forEach((fn) => fn(state));
-}
+  } catch { /* unreadable existing value is not a reason to refuse */ }
 
-/* ------------------------------------------------------------- transfer */
-
-/**
- * Progress lives per storage box, and a browser tab cannot see what the
- * home-screen app saved. This is the bridge: a code you can read out of one and
- * paste into the other.
- */
-export function exportProfile(id = state.activeId) {
-  const profile = state.profiles.find((p) => p.id === id);
-  if (!profile) return '';
-  const payload = { v: 1, profile, progress: progressOf(id) };
-  const json = JSON.stringify(payload);
-  // encodeURIComponent first so names with accents or emoji survive btoa.
-  return btoa(unescape(encodeURIComponent(json)));
-}
-
-/** @returns {{ok: boolean, name?: string, error?: string}} */
-export function importProfile(code) {
-  let payload;
+  const json = JSON.stringify(state);
   try {
-    payload = JSON.parse(decodeURIComponent(escape(atob(String(code).trim()))));
-  } catch {
-    return { ok: false, error: 'That code does not look right.' };
+    localStorage.setItem(KEY, json);
+    localStorage.setItem(BACKUP, json);
+  } catch (err) {
+    console.warn('save failed', err);
   }
-  if (!payload?.profile?.name || !payload?.progress) {
-    return { ok: false, error: 'That code is missing its progress.' };
-  }
-  // A fresh id, so importing into a device that already has this profile makes a
-  // second copy rather than silently merging two histories.
-  const id = uid();
-  const profile = { ...payload.profile, id, createdAt: Date.now() };
-  const existing = state.profiles.filter((p) => p.name === profile.name);
-  if (existing.length) profile.name = `${profile.name} (${existing.length + 1})`.slice(0, 14);
-  state.profiles.push(profile);
-  state.progress[id] = { ...emptyProgress(), ...payload.progress };
-  state.activeId = id;
-  save();
-  return { ok: true, name: profile.name };
 }
+
+/** Ask iOS to keep this data rather than evicting it under pressure. */
+export async function requestPersistence() {
+  try {
+    if (navigator.storage?.persist) return await navigator.storage.persist();
+  } catch { /* not supported */ }
+  return false;
+}
+
+export async function storageUsed() {
+  try {
+    const e = await navigator.storage?.estimate?.();
+    if (e) return { used: e.usage || 0, quota: e.quota || 0 };
+  } catch { /* not supported */ }
+  return null;
+}
+
+/* ----------------------------------------------------------------- profiles */
+
+const uid = () => `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 export function getState() { return state; }
-export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-
-export function setSetting(key, value) {
-  state.settings[key] = value;
-  save();
-}
-
-/* -------------------------------------------------------------- profiles */
-
 export function profiles() { return state.profiles; }
+export function profile(id) { return state.profiles.find((p) => p.id === id) || null; }
 
-export function activeProfile() {
-  return state.profiles.find((p) => p.id === state.activeId) || null;
-}
-
-export function setActive(id) {
-  if (state.profiles.some((p) => p.id === id)) {
-    state.activeId = id;
-    save();
-  }
-}
-
-export function addProfile({ name, color, kid = false }) {
-  const used = new Set(state.profiles.map((p) => p.color));
-  const profile = {
+/**
+ * @param {{name: string, scheme?: string, buddy?: string, kid?: boolean, photo?: string}} input
+ */
+export function createProfile(input) {
+  const p = {
     id: uid(),
-    name: String(name || 'Player').slice(0, 14),
-    color: color || PLAYER_COLORS.find((c) => !used.has(c)) || PLAYER_COLORS[0],
-    kid: !!kid,
+    name: String(input.name || '').trim().slice(0, 18) || 'You',
+    scheme: input.scheme || 'coral',
+    buddy: input.buddy || 'bubble',
+    kid: !!input.kid,
+    photo: input.photo || null,
+    // Kid profiles never get a PIN. It removes the one lockout nobody can
+    // recover from: a four-year-old setting a secret code and forgetting it.
+    pin: null,
+    recovery: null,
     createdAt: Date.now(),
+    lastSeenAt: null,
+    streak: 0,
+    week: [0, 0, 0, 0, 0, 0, 0],
+    sessions: [],
+    goals: { areas: [], corrections: [] },
+    settings: { sound: true, haptics: true, auraOpacity: 0.55 },
   };
-  state.profiles.push(profile);
-  state.progress[profile.id] = emptyProgress();
-  state.activeId = profile.id;
+  state.profiles.push(p);
   save();
-  return profile;
+  return p;
 }
 
 export function updateProfile(id, patch) {
-  const p = state.profiles.find((x) => x.id === id);
-  if (!p) return;
+  const p = profile(id);
+  if (!p) return null;
   Object.assign(p, patch);
   save();
+  return p;
 }
 
 export function removeProfile(id) {
   state.profiles = state.profiles.filter((p) => p.id !== id);
-  delete state.progress[id];
-  if (state.activeId === id) state.activeId = state.profiles[0]?.id || null;
+  if (state.lastProfileId === id) state.lastProfileId = null;
   save();
 }
 
-/** Progress for a profile, creating it on first use. */
-export function progressOf(id = state.activeId) {
-  if (!id) return emptyProgress();
-  if (!state.progress[id]) state.progress[id] = emptyProgress();
-  return state.progress[id];
+export function setLastProfile(id) {
+  state.lastProfileId = id;
+  save();
 }
 
-/* ------------------------------------------------------------- progress */
-
-export const starsByLevel = (id = state.activeId) => {
-  const out = {};
-  const levels = progressOf(id).levels || {};
-  for (const [levelId, v] of Object.entries(levels)) out[levelId] = v.stars || 0;
-  return out;
-};
-
-export const stars = (id = state.activeId) => totalStars(starsByLevel(id));
-
-/** Title and progress toward the next one, driven by stars rather than XP. */
-export function rankFor(starCount) {
-  let index = 0;
-  for (let i = 0; i < LEVEL_TITLES.length; i++) if (starCount >= LEVEL_TITLES[i].stars) index = i;
-  const current = LEVEL_TITLES[index];
-  const next = LEVEL_TITLES[index + 1] || null;
-  const span = next ? next.stars - current.stars : 1;
-  return {
-    index,
-    title: current.title,
-    emoji: current.emoji,
-    next,
-    progress: next ? Math.min(1, (starCount - current.stars) / span) : 1,
-    toNext: next ? next.stars - starCount : 0,
-  };
+/** Called when a profile is opened — drives the buddy's greeting. */
+export function touchProfile(id) {
+  const p = profile(id);
+  if (!p) return;
+  const previous = p.lastSeenAt;
+  p.lastSeenAt = Date.now();
+  save();
+  return previous;
 }
 
-export const dayKey = (ts = Date.now()) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+/* --------------------------------------------------------------------- PINs
+ *
+ * A PIN here is a lock on a phone in someone's own house, not a defence against
+ * an attacker with the device and time. It is stored hashed rather than in the
+ * clear so that a glance at localStorage does not reveal it, and the recovery
+ * code is the deliberate way back in.
+ */
 
-/** Consecutive-day streak ending today or yesterday. */
-export function streak(sessions) {
-  const list = sessions || progressOf().sessions || [];
-  if (!list.length) return 0;
-  const days = new Set(list.map((s) => dayKey(s.ts)));
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  if (!days.has(dayKey(cursor.getTime()))) cursor.setDate(cursor.getDate() - 1);
-  let count = 0;
-  while (days.has(dayKey(cursor.getTime()))) {
-    count += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return count;
+async function hash(text) {
+  const data = new TextEncoder().encode(`v1:${text}`);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function todayStats(id = state.activeId) {
-  const key = dayKey();
-  const todays = (progressOf(id).sessions || []).filter((s) => dayKey(s.ts) === key);
-  return {
-    levels: todays.length,
-    reps: todays.reduce((n, s) => n + s.reps, 0),
-    score: todays.reduce((n, s) => n + (s.score || 0), 0),
-    seconds: todays.reduce((n, s) => n + s.seconds, 0),
-  };
-}
-
-/** Reps per day for the last `days` days, oldest first. */
-export function repsByDay(days = 14, id = state.activeId) {
-  const sessions = progressOf(id).sessions || [];
-  const out = [];
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - (days - 1));
-  for (let i = 0; i < days; i++) {
-    const key = dayKey(d.getTime());
-    out.push({
-      key,
-      label: d.toLocaleDateString(undefined, { weekday: 'narrow' }),
-      reps: sessions.filter((s) => dayKey(s.ts) === key).reduce((n, s) => n + s.reps, 0),
-    });
-    d.setDate(d.getDate() + 1);
-  }
-  return out;
+export function makeRecoveryCode() {
+  const pick = () => WORDS[Math.floor(Math.random() * WORDS.length)];
+  return Array.from({ length: 6 }, pick).join(' ');
 }
 
 /**
- * Records a finished level and returns what changed, so the results screen can
- * celebrate the right things.
+ * @returns {Promise<string>} the recovery code, which the caller must show once
+ *   and must not let the user past without confirming they have saved it.
  */
-export function recordLevel(result) {
-  const id = state.activeId;
-  const p = progressOf(id);
-  const beforeStars = stars(id);
-  const beforeSkins = new Set(p.unlockedSkins);
-
-  const entry = {
-    ts: Date.now(),
-    levelId: result.levelId,
-    reps: result.reps,
-    score: result.score,
-    stars: result.stars,
-    seconds: result.seconds,
-  };
-  p.sessions.push(entry);
-  if (p.sessions.length > 400) p.sessions = p.sessions.slice(-400);
-  p.xp += result.xp || 0;
-  p.totalReps += result.reps || 0;
-  p.totalSeconds += result.seconds || 0;
-
-  const prev = p.levels[result.levelId] || { stars: 0, bestScore: 0 };
-  p.levels[result.levelId] = {
-    stars: Math.max(prev.stars, result.stars || 0),
-    bestScore: Math.max(prev.bestScore, result.score || 0),
-  };
-
-  const afterStars = stars(id);
-  // Skins unlock on total stars, so finishing a level can hand you a new look.
-  const nowUnlocked = SKIN_IDS.filter((s) => afterStars >= (SKINS[s].unlockAt || 0));
-  p.unlockedSkins = nowUnlocked;
-  const newSkins = nowUnlocked.filter((s) => !beforeSkins.has(s));
-
-  const earned = checkBadges(p, result, afterStars);
+export async function setPin(id, pin) {
+  const p = profile(id);
+  if (!p || p.kid) return null;
+  const code = makeRecoveryCode();
+  p.pin = await hash(pin);
+  p.recovery = await hash(code);
   save();
-
-  return {
-    entry,
-    earned,
-    newSkins,
-    stars: afterStars,
-    starsGained: afterStars - beforeStars,
-    rank: rankFor(afterStars),
-    rankUp: rankFor(afterStars).index > rankFor(beforeStars).index,
-    streak: streak(p.sessions),
-  };
+  return code;
 }
 
-function award(p, id, into) {
-  if (!p.badges.includes(id)) {
-    p.badges.push(id);
-    const badge = BADGES.find((b) => b.id === id);
-    if (badge) into.push(badge);
-  }
-}
-
-function checkBadges(p, result, starCount) {
-  const earned = [];
-  award(p, 'first', earned);
-  const s = streak(p.sessions);
-  if (s >= 3) award(p, 'streak3', earned);
-  if (s >= 7) award(p, 'streak7', earned);
-  if ((result.bestCombo || 0) >= 10) award(p, 'combo10', earned);
-  if ((result.bestCombo || 0) >= 25) award(p, 'combo25', earned);
-  if (result.stars >= 3) award(p, 'perfect', earned);
-  if (p.totalReps >= 500) award(p, 'reps500', earned);
-  if (/boss/i.test(result.levelId || '')) award(p, 'boss', earned);
-  const firstWorld = LEVELS.filter((l) => l.world === 'first-light');
-  if (firstWorld.every((l) => (p.levels[l.id]?.stars || 0) > 0)) award(p, 'world1', earned);
-  return earned;
-}
-
-export function setSkin(skinId) {
-  const p = progressOf();
-  if (p.unlockedSkins.includes(skinId)) {
-    p.skin = skinId;
-    save();
-  }
-}
-
-/** Colour + skin for the ghost of the active profile. */
-export function activeStyle() {
-  const profile = activeProfile();
-  const p = progressOf();
-  return {
-    color: profile?.color || PLAYER_COLORS[0],
-    skin: p.skin || 'glow',
-    label: null,
-  };
-}
-
-export function resetProfile(id = state.activeId) {
-  state.progress[id] = emptyProgress();
+export async function clearPin(id) {
+  const p = profile(id);
+  if (!p) return;
+  p.pin = null;
+  p.recovery = null;
   save();
+}
+
+export async function checkPin(id, pin) {
+  const p = profile(id);
+  if (!p?.pin) return true;
+  const ok = p.pin === await hash(pin);
+  if (ok) markUnlocked(id);
+  return ok;
+}
+
+export async function checkRecovery(id, code) {
+  const p = profile(id);
+  if (!p?.recovery) return false;
+  const normal = String(code).trim().toLowerCase().replace(/\s+/g, ' ');
+  const ok = p.recovery === await hash(normal);
+  if (ok) markUnlocked(id);
+  return ok;
+}
+
+export function markUnlocked(id) {
+  unlockedId = id;
+  unlockedUntil = Date.now() + UNLOCK_MS;
+}
+
+/** True when this profile was unlocked recently enough not to ask again. */
+export function isUnlocked(id) {
+  const p = profile(id);
+  if (!p || !p.pin) return true;
+  return unlockedId === id && Date.now() < unlockedUntil;
+}
+
+export function lockNow() {
+  unlockedId = null;
+  unlockedUntil = 0;
+}
+
+/* -------------------------------------------------------------- the record */
+
+/** Seven booleans, Monday first, for the dots under the buddy. */
+export function weekDots(id) {
+  const p = profile(id);
+  if (!p) return [0, 0, 0, 0, 0, 0, 0];
+  const start = startOfWeek();
+  const out = [0, 0, 0, 0, 0, 0, 0];
+  for (const s of p.sessions || []) {
+    const d = Math.floor((s.at - start) / 86400000);
+    if (d >= 0 && d < 7) out[d] = Math.max(out[d], s.effort || 0.4);
+  }
+  return out;
+}
+
+function startOfWeek(now = Date.now()) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  const day = (d.getDay() + 6) % 7;      // Monday = 0
+  d.setDate(d.getDate() - day);
+  return d.getTime();
+}
+
+export function addActivity(entry) {
+  state.activity.unshift({ at: Date.now(), ...entry });
+  state.activity = state.activity.slice(0, 200);
+  save();
+}
+
+export function activity() { return state.activity; }
+
+/* -------------------------------------------------------------- export/wipe */
+
+export function exportAll() {
+  return JSON.stringify({ version: 1, exportedAt: Date.now(), data: state }, null, 2);
+}
+
+export function wipeEverything() {
+  state = structuredClone(EMPTY);
+  try {
+    localStorage.removeItem(KEY);
+    localStorage.removeItem(BACKUP);
+  } catch { /* nothing to remove */ }
+  lockNow();
 }

@@ -1,13 +1,13 @@
 {
-  "name": "sloth-mode",
+  "name": "bubble",
   "version": "1.0.0",
-  "description": "A lazy workout game that counts your reps by watching your feet through the camera.",
+  "description": "Workouts you do lying down, a body journal that's yours alone, and bubble games with your kids.",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
     "start": "node scripts/serve.mjs",
-    "dev": "node scripts/serve.mjs"
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "license": "MIT"
 }
