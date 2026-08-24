@@ -158,54 +158,43 @@
   --ink-faint: #A9A288;
 }
 
-/* --------------------------------------------------------- bubble material
+/* ------------------------------------------------- bubble mascot, v1.0
  *
- * One material, shared by the creature and by everything she wears. The canvas
- * renderer in js/buddy.js reads these at draw time, so the whole material can be
- * retuned from here without touching the drawing code — and an accessory drawn
- * later is guaranteed to be made of the same stuff she is.
+ * The design system, as specified. One material shared by the mascot and by
+ * everything she wears. The canvas renderer in js/buddy.js reads these at draw
+ * time, so the whole thing retunes from here without touching drawing code.
  *
- * Per-skin colour lives in SKINS in js/buddy.js. These are the properties every
- * skin shares: how transparent the shell is, how it catches light, and the four
- * interference colours that play over the top of whatever hue is underneath.
+ * The five hues are the single source of truth for her colour: the renderer
+ * solves the paint it needs from these, rather than storing a second set of
+ * numbers that could drift out of step with them.
  */
 
 :root {
-  --bubble-opacity: 0.72;
-  --bubble-highlight: rgba(255, 255, 255, 0.80);
-  --bubble-edge-highlight: rgba(255, 255, 255, 0.55);
+  --bubble-pink: #EDCCE7;
+  --bubble-blue: #D0E9EF;
+  --bubble-peach: #F8DACF;
+  --bubble-mint: #D8EFEB;
+  --bubble-cream: #F4F0D7;
+
+  --bubble-bg: #FBF8F0;
+  --bubble-face: #2F2D27;
+
+  --bubble-highlight: rgba(255, 255, 255, 0.78);
   --bubble-shadow: rgba(80, 70, 85, 0.10);
 
-  --bubble-iridescent-pink: rgba(255, 190, 235, 0.30);
-  --bubble-iridescent-blue: rgba(185, 225, 255, 0.30);
-  --bubble-iridescent-lilac: rgba(220, 200, 255, 0.25);
-  --bubble-iridescent-yellow: rgba(255, 235, 170, 0.22);
+  --bubble-iridescent-pink: rgba(255, 190, 235, 0.24);
+  --bubble-iridescent-blue: rgba(185, 225, 255, 0.24);
+  --bubble-iridescent-lilac: rgba(220, 200, 255, 0.22);
+  --bubble-iridescent-gold: rgba(255, 235, 170, 0.18);
 
-  --bubble-blur: 10px;
-  --bubble-gloss: 0.85;
-}
+  --bubble-body-opacity: 0.76;
+  --bubble-accessory-opacity: 0.64;
 
-/* How strongly a mood shows in her body. 1 is the full posture; 0 leaves her
-   neutral whatever mood she is in. With no face to carry expression this is the
-   only dial for how much she emotes, so it is worth having as one number. */
-:root { --bubble-expression: 0.6; }
+  --bubble-shadow-blur: 24px;
+  --bubble-radius: 999px;
 
-/* Face. The master spec says no facial features, so this is off. It is a token
-   rather than deleted code because the moods, the greeting and the blink are all
-   still here and still working — flipping this to 1 brings her eyes back with
-   nothing else to change. */
-:root { --bubble-face: 0; }
-
-/* The ground the mascot is presented on, from the spec. Used where she appears
-   on her own — the icon, the colour picker — rather than app-wide: the mesh
-   gradient behind the home screen is a separate decision. */
-:root { --bubble-ground: #FBF8F0; }
-
-/* Accessories. Tint comes from the mascot's own base hue, so it is not a token —
-   it is whichever skin she is wearing. */
-:root {
-  --accessory-opacity: 0.64;
-  --accessory-edge-opacity: 0.85;
-  --accessory-highlight: rgba(255, 255, 255, 0.72);
-  --accessory-iridescence: 0.35;
+  /* Not in the spec, but she has no dialogue and only one body: this is how
+     strongly a mood shows in her posture. 1 is the full stance, 0 leaves her
+     neutral whatever mood she is in. */
+  --bubble-expression: 0.6;
 }

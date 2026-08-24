@@ -4,8 +4,10 @@ import assert from 'node:assert/strict';
 
 // buddy.js touches the DOM only inside createBuddy(), so the geometry and the
 // skins table can be imported and checked in plain node.
-const { SKINS, skinFor, halfOutline, TOP, BOTTOM, HALF_WIDTH, MAX_HALF_WIDTH } =
-  await import('../js/buddy.js');
+const {
+  SKINS, skinFor, halfOutline, TOP, BOTTOM, HALF_WIDTH, MAX_HALF_WIDTH,
+  FACES, POSTURE, parseMaterial, MATERIAL_DEFAULTS, solveWash, washFor, CENTRE_ALPHA,
+} = await import('../js/buddy.js');
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -14,10 +16,9 @@ test('every skin is complete enough to draw with', () => {
   for (const s of SKINS) {
     assert.match(s.id, /^[a-z][a-z0-9-]*$/, `${s.id}: id should be a slug`);
     assert.ok(s.name && s.name.length, `${s.id}: needs a display name`);
-    assert.match(s.wash, HEX, `${s.id}: wash must be a six-digit hex`);
-    // `base` is the colour from the master spec — what the middle of her body
-    // should look like. `wash` is only the paint that gets there.
-    assert.match(s.base, HEX, `${s.id}: base must be a six-digit hex`);
+    // Colour is NOT stored on the skin — it comes from the --bubble-<id> token.
+    assert.equal(s.wash, undefined, `${s.id}: wash must not be hardcoded`);
+    assert.ok(MATERIAL_DEFAULTS.palette[s.id], `${s.id}: has no hue in the palette`);
     // Fewer than three bands and the "iridescence" is just a gradient.
     assert.ok(s.bands.length >= 3, `${s.id}: needs at least three bands`);
     for (const b of s.bands) assert.match(b, HEX, `${s.id}: band ${b} is not hex`);
@@ -100,38 +101,38 @@ test('the arm swing moves the arm and leaves the rest alone', () => {
 
 /* ------------------------------------------------------------- the material */
 
-const { parseMaterial, MATERIAL_DEFAULTS, POSTURE } = await import('../js/buddy.js');
-
 const reader = (map) => (name) => map[name] ?? '';
 
 test('the material reads the tokens', () => {
   const m = parseMaterial(reader({
-    '--bubble-opacity': ' 0.5 ',
+    '--bubble-body-opacity': ' 0.5 ',
     '--bubble-highlight': 'rgba(1,2,3,0.4)',
-    '--bubble-edge-highlight': '#ABCDEF',
+    '--bubble-face': '#ABCDEF',
     '--bubble-shadow': 'rgb(9, 8, 7)',
+    '--bubble-shadow-blur': '18px',
     '--bubble-iridescent-pink': 'rgba(255,0,0,0.1)',
-    '--bubble-blur': '4px',
-    '--bubble-gloss': '1.2',
+    '--bubble-mint': '#123456',
   }));
-  assert.equal(m.opacity, 0.5);
+  assert.equal(m.bodyOpacity, 0.5);
   assert.equal(m.highlight, 'rgba(1,2,3,0.4)');
-  assert.equal(m.edgeHighlight, '#ABCDEF');
+  assert.equal(m.faceInk, '#ABCDEF');
   assert.equal(m.shadow, 'rgb(9, 8, 7)');
-  assert.equal(m.blur, 4);
-  assert.equal(m.gloss, 1.2);
+  assert.equal(m.shadowBlur, 18);
   assert.equal(m.iridescent[0], 'rgba(255,0,0,0.1)');
-  // the three not supplied fall back individually, not as a block
+  assert.equal(m.palette.mint, '#123456');
+  // the ones not supplied fall back individually, not as a block
   assert.equal(m.iridescent[1], MATERIAL_DEFAULTS.iridescent[1]);
+  assert.equal(m.palette.pink, MATERIAL_DEFAULTS.palette.pink);
 });
 
 test('a missing stylesheet gives the defaults, not a blank creature', () => {
   // This is the failure that matters: an unparsed --bubble-opacity would reach
   // globalAlpha as NaN, and a NaN globalAlpha draws absolutely nothing.
-  for (const broken of [{}, { '--bubble-opacity': 'wat' }, { '--bubble-opacity': '' }]) {
+  for (const broken of [{}, { '--bubble-body-opacity': 'wat' },
+                        { '--bubble-body-opacity': '' }]) {
     const m = parseMaterial(reader(broken));
-    assert.equal(m.opacity, MATERIAL_DEFAULTS.opacity);
-    assert.ok(Number.isFinite(m.opacity));
+    assert.equal(m.bodyOpacity, MATERIAL_DEFAULTS.bodyOpacity);
+    assert.ok(Number.isFinite(m.bodyOpacity));
   }
 });
 
@@ -148,23 +149,63 @@ test('nonsense colours fall back rather than drawing invisibly', () => {
 
 test('material numbers are clamped to something drawable', () => {
   const m = parseMaterial(reader({
-    '--bubble-opacity': '9', '--bubble-gloss': '-3', '--bubble-blur': '-1',
+    '--bubble-body-opacity': '9', '--bubble-expression': '-3',
+    '--bubble-shadow-blur': '-1',
   }));
-  assert.equal(m.opacity, 1);
-  assert.equal(m.gloss, 0);
-  assert.equal(m.blur, 0);
+  assert.equal(m.bodyOpacity, 1);
+  assert.equal(m.expression, 0);
+  assert.equal(m.shadowBlur, 0);
 });
 
 test('every material token in tokens.css is one the renderer reads', async () => {
   // Catches the quiet failure of a token being renamed in one file only.
   const css = await readFile(new URL('../styles/tokens.css', import.meta.url), 'utf8');
   const declared = [...css.matchAll(/(--bubble-[a-z-]+)\s*:/g)].map((m) => m[1]);
-  assert.ok(declared.length >= 10, `only found ${declared.length} bubble tokens`);
+  assert.ok(declared.length >= 16, `only found ${declared.length} bubble tokens`);
 
   const src = await readFile(new URL('../js/buddy.js', import.meta.url), 'utf8');
+  const hues = Object.keys(MATERIAL_DEFAULTS.palette).map((id) => `--bubble-${id}`);
   for (const name of declared) {
+    // The hue tokens are read by template, not by literal.
+    if (hues.includes(name)) continue;
     assert.ok(src.includes(`'${name}'`), `${name} is declared but never read`);
   }
+  for (const hue of hues) {
+    assert.ok(declared.includes(hue), `${hue} is read but never declared`);
+  }
+});
+
+/* ------------------------------------------------------------------ colour */
+
+test('the wash solves back to the hue it came from', () => {
+  // The whole point of deriving rather than storing: whatever the token says,
+  // the middle of her body has to land on it.
+  const mat = parseMaterial(reader({}));
+  const alpha = CENTRE_ALPHA * mat.bodyOpacity;
+  for (const s of SKINS) {
+    const base = mat.palette[s.id];
+    const paint = washFor(s.id, mat);
+    const hex = (c, i) => parseInt(c.replace('#', '').slice(i, i + 2), 16);
+    for (const i of [0, 2, 4]) {
+      const seen = hex(paint, i) * alpha + hex(mat.bg, i) * (1 - alpha);
+      assert.ok(Math.abs(seen - hex(base, i)) <= 1.5,
+        `${s.id}: channel ${i / 2} renders ${seen.toFixed(1)}, token says ${hex(base, i)}`);
+    }
+  }
+});
+
+test('an unknown hue still paints something', () => {
+  const mat = parseMaterial(reader({}));
+  assert.match(washFor('nonsense', mat), HEX);
+  assert.match(solveWash('#FFFFFF', '#FFFFFF', 0), HEX);
+});
+
+/* ------------------------------------------------------------------- faces */
+
+test('every face has a posture', () => {
+  assert.equal(FACES.length, 10);
+  for (const f of FACES) assert.ok(POSTURE[f], `${f} has no posture`);
+  assert.equal(Object.keys(POSTURE).length, FACES.length);
 });
 
 test('expression scales toward neutral, and bob/rate toward one', () => {

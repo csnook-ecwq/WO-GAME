@@ -56,7 +56,7 @@ export function renderLaunch() {
   wrap.append(mark, by);
   s.appendChild(wrap);
 
-  const buddy = createBuddy(canvas, { mood: 'content', energy: 1, logo: true });
+  const buddy = createBuddy(canvas, { face: 'content', energy: 1, logo: true });
   requestAnimationFrame(() => buddy.start());
   s.addEventListener('screen:leave', () => buddy.stop());
   return s;
@@ -205,9 +205,9 @@ export function renderHome(profileId, ctl) {
   const dots = store.weekDots(profileId);
   const today = (new Date().getDay() + 6) % 7;
   const buddy = createBuddy(canvas, {
-    mood: g.mood,
+    face: g.face,
     energy: auraEnergy(dots, today),
-    skin: p.skin,
+    bodyColor: p.skin,
   });
   requestAnimationFrame(() => {
     buddy.start();
@@ -407,7 +407,7 @@ export function renderSettings(profileId, ctl) {
   const skinRow = h('div', 'buddy-skins');
   const preview = h('canvas', 'buddy-preview');
   const previewBuddy = createBuddy(preview, {
-    mood: 'content', aura: false, skin: p.skin || 'pearl',
+    face: 'content', aura: false, bodyColor: p.skin || 'pink',
   });
   requestAnimationFrame(() => previewBuddy.start());
   s.addEventListener('screen:leave', () => previewBuddy.stop());
@@ -423,7 +423,7 @@ export function renderSettings(profileId, ctl) {
     // or peach comes out pink: its band sweep passes through magenta.
     b.style.background =
       `radial-gradient(circle at 34% 28%, rgba(255,255,255,0.94), ` +
-      `${sk.bands[2]} 52%, ${sk.wash} 100%)`;
+      `${sk.bands[2]} 52%, var(--bubble-${sk.id}) 100%)`;
     b.onclick = () => {
       store.updateProfile(profileId, { skin: sk.id });
       previewBuddy.setSkin(sk.id);
@@ -586,7 +586,7 @@ export function renderOnboarding(ctl) {
   stage.appendChild(canvas);
   s.appendChild(stage);
 
-  const buddy = createBuddy(canvas, { mood: 'excited' });
+  const buddy = createBuddy(canvas, { face: 'cheerful' });
   requestAnimationFrame(() => { buddy.start(); buddy.play('wave'); });
   s.addEventListener('screen:leave', () => buddy.stop());
 
