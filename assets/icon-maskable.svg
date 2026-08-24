@@ -2,8 +2,8 @@
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#FBF8F0"/>
-      <stop offset="0.5" stop-color="#FCF3EE"/>
-      <stop offset="1" stop-color="#F6EFFA"/>
+      <stop offset="0.5" stop-color="#FAF5EF"/>
+      <stop offset="1" stop-color="#F7F1F3"/>
     </linearGradient>
 
     <!-- Colour gathers in the middle and clears toward the perimeter. -->
@@ -96,12 +96,6 @@
     <ellipse cx="-0.238" cy="-0.905" rx="0.036" ry="0.115"
              transform="rotate(-10.9 -0.238 -0.905)" fill="#ffffff" opacity="0.20"/>
 
-    <!-- face, high on the dome -->
-    <g fill="#2E2430" fill-opacity="0.78">
-      <ellipse cx="-0.170" cy="-0.780" rx="0.050" ry="0.066"/>
-      <ellipse cx="0.170" cy="-0.780" rx="0.050" ry="0.066"/>
-    </g>
-    <path d="M-0.070,-0.643 a0.074,0.074 0 0 0 0.140,0" fill="none"
-          stroke="#2E2430" stroke-opacity="0.78" stroke-width="0.040" stroke-linecap="round"/>
+
   </g>
 </svg>

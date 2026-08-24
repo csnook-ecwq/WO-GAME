@@ -184,3 +184,23 @@
   --bubble-blur: 10px;
   --bubble-gloss: 0.85;
 }
+
+/* Face. The master spec says no facial features, so this is off. It is a token
+   rather than deleted code because the moods, the greeting and the blink are all
+   still here and still working — flipping this to 1 brings her eyes back with
+   nothing else to change. */
+:root { --bubble-face: 0; }
+
+/* The ground the mascot is presented on, from the spec. Used where she appears
+   on her own — the icon, the colour picker — rather than app-wide: the mesh
+   gradient behind the home screen is a separate decision. */
+:root { --bubble-ground: #FBF8F0; }
+
+/* Accessories. Tint comes from the mascot's own base hue, so it is not a token —
+   it is whichever skin she is wearing. */
+:root {
+  --accessory-opacity: 0.64;
+  --accessory-edge-opacity: 0.85;
+  --accessory-highlight: rgba(255, 255, 255, 0.72);
+  --accessory-iridescence: 0.35;
+}

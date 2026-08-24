@@ -25,6 +25,33 @@ const TAU = Math.PI * 2;
 
 export const MOODS = ['happy', 'content', 'excited', 'sleepy', 'squint', 'sulk'];
 
+/**
+ * How each mood sits in the body.
+ *
+ * The master spec says no facial features, and a creature with no face has only
+ * posture left to say anything with. Without this every mood renders identically
+ * and the whole greeting system — squinting at you after a fortnight, yawning
+ * at midnight — silently stops meaning anything while still appearing to work.
+ *
+ *   tilt     lean, in radians
+ *   slump    downward squash; negative stretches her taller
+ *   bob      how far the idle float travels
+ *   rate     how fast she breathes, as a multiple of resting
+ *   droop    how far the arms hang
+ */
+export const POSTURE = {
+  happy:   { tilt: 0.00, slump: 0.00, bob: 1.00, rate: 1.00, droop: 0.00 },
+  content: { tilt: 0.03, slump: 0.04, bob: 0.75, rate: 0.80, droop: 0.05 },
+  excited: { tilt: 0.00, slump: -0.10, bob: 1.85, rate: 1.70, droop: -0.30 },
+  sleepy:  { tilt: 0.09, slump: 0.16, bob: 0.45, rate: 0.45, droop: 0.34 },
+  squint:  { tilt: -0.07, slump: 0.06, bob: 0.80, rate: 0.90, droop: 0.10 },
+  sulk:    { tilt: 0.00, slump: 0.20, bob: 0.35, rate: 0.65, droop: 0.42 },
+};
+
+export function postureFor(mood) {
+  return POSTURE[mood] || POSTURE.happy;
+}
+
 /* -------------------------------------------------------------------- skins
  *
  * Every colourway is one entry. The renderer never learns a colour name, so
@@ -150,6 +177,14 @@ export const MATERIAL_DEFAULTS = {
   ],
   blur: 10,
   gloss: 0.85,
+  face: 0,
+  ground: '#FBF8F0',
+  accessory: {
+    opacity: 0.64,
+    edgeOpacity: 0.85,
+    highlight: 'rgba(255,255,255,0.72)',
+    iridescence: 0.35,
+  },
 };
 
 const MATERIAL_VARS = {
@@ -159,6 +194,15 @@ const MATERIAL_VARS = {
   shadow: '--bubble-shadow',
   blur: '--bubble-blur',
   gloss: '--bubble-gloss',
+  face: '--bubble-face',
+  ground: '--bubble-ground',
+};
+
+const ACCESSORY_VARS = {
+  opacity: '--accessory-opacity',
+  edgeOpacity: '--accessory-edge-opacity',
+  highlight: '--accessory-highlight',
+  iridescence: '--accessory-iridescence',
 };
 
 const IRIDESCENT_VARS = [
@@ -173,6 +217,8 @@ const IRIDESCENT_VARS = [
  * @returns {typeof MATERIAL_DEFAULTS}
  */
 export function parseMaterial(read) {
+  const D = MATERIAL_DEFAULTS;
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
   const num = (name, fallback) => {
     const v = parseFloat(String(read(name) ?? '').trim());
     return Number.isFinite(v) ? v : fallback;
@@ -192,6 +238,14 @@ export function parseMaterial(read) {
     iridescent: IRIDESCENT_VARS.map((v, i) => col(v, MATERIAL_DEFAULTS.iridescent[i])),
     blur: Math.max(0, num(MATERIAL_VARS.blur, MATERIAL_DEFAULTS.blur)),
     gloss: Math.max(0, Math.min(2, num(MATERIAL_VARS.gloss, MATERIAL_DEFAULTS.gloss))),
+    face: num(MATERIAL_VARS.face, MATERIAL_DEFAULTS.face) > 0,
+    ground: col(MATERIAL_VARS.ground, MATERIAL_DEFAULTS.ground),
+    accessory: {
+      opacity: clamp01(num(ACCESSORY_VARS.opacity, D.accessory.opacity)),
+      edgeOpacity: clamp01(num(ACCESSORY_VARS.edgeOpacity, D.accessory.edgeOpacity)),
+      highlight: col(ACCESSORY_VARS.highlight, D.accessory.highlight),
+      iridescence: clamp01(num(ACCESSORY_VARS.iridescence, D.accessory.iridescence)),
+    },
   };
 }
 
@@ -724,9 +778,18 @@ export function createBuddy(canvas, opts = {}) {
   const lift = makeSpring(0, 150, 11);
   const lean = makeSpring(0, 170, 12);
   const armLift = makeSpring(0, 160, 10);
+  // Posture is sprung too, so changing mood is her settling into a new stance
+  // rather than teleporting into it.
+  const tilt = makeSpring(0, 90, 14);
+  const slump = makeSpring(0, 90, 14);
+  const droop = makeSpring(0, 90, 14);
+  let bob = 1, rate = 1;
 
   let spin = 0;
   let spinVel = 0;
+  // Accumulated rather than derived from the clock, so changing breathing rate
+  // speeds her up instead of jumping her to a different point in the cycle.
+  let phase = 0;
   let puff = null;
   const queue = [];
   let busyUntil = 0;
@@ -779,15 +842,28 @@ export function createBuddy(canvas, opts = {}) {
     stepSpring(lift, dt);
     stepSpring(lean, dt);
     stepSpring(armLift, dt);
+
+    const post = postureFor(state.mood);
+    tilt.target = post.tilt;
+    slump.target = post.slump;
+    droop.target = post.droop;
+    stepSpring(tilt, dt);
+    stepSpring(slump, dt);
+    stepSpring(droop, dt);
+    bob += (post.bob - bob) * Math.min(1, dt * 4);
+    rate += (post.rate - rate) * Math.min(1, dt * 4);
     if (Math.abs(spinVel) > 0.001) {
       spin += spinVel * dt;
       spinVel *= Math.pow(0.12, dt);
       if (Math.abs(spinVel) < 0.02) { spinVel = 0; spin = 0; }
     }
 
-    // idle: a slow float with a matching breath, so she feels buoyant
-    const float = Math.sin(time * 0.0011) * 0.03;
-    const breathe = Math.sin(time * 0.0011 + Math.PI / 2) * 0.025;
+    // idle: a slow float with a matching breath, so she feels buoyant. Both the
+    // travel and the speed come from the mood, which is what makes an excited
+    // creature visibly different from a sulking one with no face on either.
+    phase += dt * 0.0011 * rate * 1000;
+    const float = Math.sin(phase) * 0.03 * bob;
+    const breathe = Math.sin(phase + Math.PI / 2) * 0.025 * bob;
 
     // blinking at irregular intervals — regular blinking looks mechanical
     state.nextBlink -= dt * 1000;
@@ -826,10 +902,10 @@ export function createBuddy(canvas, opts = {}) {
 
     ctx.translate(0, (float + lift.value * 0.06) * u);
     if (spin) ctx.rotate(spin);
-    ctx.rotate(lean.value * 0.05);
+    ctx.rotate(lean.value * 0.05 + tilt.value);
     ctx.scale(
-      (1 + breathe + squash.value * 0.05) * u,
-      (1 - breathe - squash.value * 0.035) * u
+      (1 + breathe + squash.value * 0.05 + slump.value * 0.35) * u,
+      (1 - breathe - squash.value * 0.035 - slump.value * 0.30) * u
     );
 
     // Ground shadow, so she reads as standing on something. The material names
@@ -848,7 +924,9 @@ export function createBuddy(canvas, opts = {}) {
     ctx.fill();
     ctx.restore();
 
-    const arm = armLift.value;
+    // A drooping arm is a lowered one, so the posture rides the same channel the
+    // cheer does.
+    const arm = armLift.value - droop.value;
     const trace = () => traceOutline(ctx, arm);
     // The shell itself is translucent — you should see the background through
     // her. The face stays fully opaque outside this block, because eyes that
@@ -863,7 +941,9 @@ export function createBuddy(canvas, opts = {}) {
     highlights(ctx, skin, mat);
     ctx.restore();
 
-    face(ctx, -0.780, 1, state);
+    // Off by default: the master spec says no facial features. Everything that
+    // drives it is still here and still running, so one token brings it back.
+    if (mat.face) face(ctx, -0.780, 1, state);
 
     if (puff) {
       puff.r += dt * 0.34;
