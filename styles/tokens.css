@@ -157,3 +157,30 @@
   --ink-soft: #6D6650;
   --ink-faint: #A9A288;
 }
+
+/* --------------------------------------------------------- bubble material
+ *
+ * One material, shared by the creature and by everything she wears. The canvas
+ * renderer in js/buddy.js reads these at draw time, so the whole material can be
+ * retuned from here without touching the drawing code — and an accessory drawn
+ * later is guaranteed to be made of the same stuff she is.
+ *
+ * Per-skin colour lives in SKINS in js/buddy.js. These are the properties every
+ * skin shares: how transparent the shell is, how it catches light, and the four
+ * interference colours that play over the top of whatever hue is underneath.
+ */
+
+:root {
+  --bubble-opacity: 0.72;
+  --bubble-highlight: rgba(255, 255, 255, 0.80);
+  --bubble-edge-highlight: rgba(255, 255, 255, 0.55);
+  --bubble-shadow: rgba(80, 70, 85, 0.10);
+
+  --bubble-iridescent-pink: rgba(255, 190, 235, 0.30);
+  --bubble-iridescent-blue: rgba(185, 225, 255, 0.30);
+  --bubble-iridescent-lilac: rgba(220, 200, 255, 0.25);
+  --bubble-iridescent-yellow: rgba(255, 235, 170, 0.22);
+
+  --bubble-blur: 10px;
+  --bubble-gloss: 0.85;
+}

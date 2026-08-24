@@ -161,6 +161,98 @@ function withAlpha(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** Rescale an existing rgba()/#hex colour's alpha. Returns null if unparseable. */
+function scaleAlpha(colour, factor) {
+  const m = String(colour).match(
+    /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,/\s]+([\d.]+))?\s*\)/i
+  );
+  if (m) {
+    const a = m[4] === undefined ? 1 : parseFloat(m[4]);
+    return `rgba(${+m[1]},${+m[2]},${+m[3]},${Math.max(0, Math.min(1, a * factor))})`;
+  }
+  if (/^#[0-9a-f]{3,8}$/i.test(String(colour).trim())) {
+    return withAlpha(String(colour).trim(), Math.max(0, Math.min(1, factor)));
+  }
+  return null;
+}
+
+/* ---------------------------------------------------------- the material
+ *
+ * One material, shared by the creature and by everything she will wear, defined
+ * in styles/tokens.css so the whole thing can be retuned from one place.
+ *
+ * Every value falls back if the stylesheet has not loaded or a name is
+ * misspelled. That matters more than it sounds: a bad `--bubble-opacity` would
+ * otherwise resolve to NaN, and a NaN globalAlpha silently draws nothing at all.
+ */
+
+export const MATERIAL_DEFAULTS = {
+  opacity: 0.72,
+  highlight: 'rgba(255,255,255,0.80)',
+  edgeHighlight: 'rgba(255,255,255,0.55)',
+  shadow: 'rgba(80,70,85,0.10)',
+  iridescent: [
+    'rgba(255,190,235,0.30)',
+    'rgba(185,225,255,0.30)',
+    'rgba(220,200,255,0.25)',
+    'rgba(255,235,170,0.22)',
+  ],
+  blur: 10,
+  gloss: 0.85,
+};
+
+const MATERIAL_VARS = {
+  opacity: '--bubble-opacity',
+  highlight: '--bubble-highlight',
+  edgeHighlight: '--bubble-edge-highlight',
+  shadow: '--bubble-shadow',
+  blur: '--bubble-blur',
+  gloss: '--bubble-gloss',
+};
+
+const IRIDESCENT_VARS = [
+  '--bubble-iridescent-pink',
+  '--bubble-iridescent-blue',
+  '--bubble-iridescent-lilac',
+  '--bubble-iridescent-yellow',
+];
+
+/**
+ * @param {(name: string) => string} read a custom-property lookup
+ * @returns {typeof MATERIAL_DEFAULTS}
+ */
+export function parseMaterial(read) {
+  const num = (name, fallback) => {
+    const v = parseFloat(String(read(name) ?? '').trim());
+    return Number.isFinite(v) ? v : fallback;
+  };
+  const col = (name, fallback) => {
+    const v = String(read(name) ?? '').trim();
+    // Anything that isn't a colour we can actually reason about is refused, so a
+    // typo degrades to the default rather than to a transparent creature.
+    return scaleAlpha(v, 1) ? v : fallback;
+  };
+
+  return {
+    opacity: Math.max(0, Math.min(1, num(MATERIAL_VARS.opacity, MATERIAL_DEFAULTS.opacity))),
+    highlight: col(MATERIAL_VARS.highlight, MATERIAL_DEFAULTS.highlight),
+    edgeHighlight: col(MATERIAL_VARS.edgeHighlight, MATERIAL_DEFAULTS.edgeHighlight),
+    shadow: col(MATERIAL_VARS.shadow, MATERIAL_DEFAULTS.shadow),
+    iridescent: IRIDESCENT_VARS.map((v, i) => col(v, MATERIAL_DEFAULTS.iridescent[i])),
+    blur: Math.max(0, num(MATERIAL_VARS.blur, MATERIAL_DEFAULTS.blur)),
+    gloss: Math.max(0, Math.min(2, num(MATERIAL_VARS.gloss, MATERIAL_DEFAULTS.gloss))),
+  };
+}
+
+function readMaterial() {
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    return parseMaterial((name) => cs.getPropertyValue(name));
+  } catch {
+    return { ...MATERIAL_DEFAULTS };
+  }
+}
+
 /* ------------------------------------------------------------------- shapes
  *
  * Body units, measured off the reference photograph rather than eyeballed: the
@@ -300,7 +392,7 @@ function circlePath(ctx, x, y, r) {
  * would multiply against nothing and she would vanish. Straight alpha, with the
  * wash colour chosen to land on the measured interior over a light ground.
  */
-function glossy(ctx, trace, { skin, t, seed = 0, unit = 1, box }) {
+function glossy(ctx, trace, { skin, mat, t, seed = 0, unit = 1, box }) {
   const { cx, cy, rx, ry } = box;
 
   // 0 — the outer surface, a whisper of shadow just outside the edge. Soap has a
@@ -332,11 +424,44 @@ function glossy(ctx, trace, { skin, t, seed = 0, unit = 1, box }) {
   const bloom = ctx.createRadialGradient(
     cx - rx * 0.18, cy - ry * 0.42, 0, cx - rx * 0.18, cy - ry * 0.42, ry * 0.95
   );
-  bloom.addColorStop(0, 'rgba(255,255,255,0.30)');
-  bloom.addColorStop(0.55, 'rgba(255,255,255,0.11)');
-  bloom.addColorStop(1, 'rgba(255,255,255,0)');
+  bloom.addColorStop(0, scaleAlpha(mat.highlight, 0.38 * mat.gloss));
+  bloom.addColorStop(0.55, scaleAlpha(mat.highlight, 0.14 * mat.gloss));
+  bloom.addColorStop(1, scaleAlpha(mat.highlight, 0));
   ctx.fillStyle = bloom;
   ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
+
+  // The shared interference wash: the four material colours drifting across the
+  // whole surface, over whatever hue the skin puts underneath. This is the layer
+  // that will make an accessory look like it is made of the same stuff she is —
+  // its colour comes from the material, not from her skin.
+  const sweep = (t * 0.000041 + seed * 0.17) % 1;
+  const iris = ctx.createLinearGradient(
+    cx - rx * 1.1, cy - ry * 0.8, cx + rx * 1.1, cy + ry * 0.9
+  );
+  const shades = mat.iridescent;
+  for (let i = 0; i <= shades.length * 2; i++) {
+    const o = i / (shades.length * 2);
+    iris.addColorStop(o, shades[Math.floor((o + sweep) * shades.length) % shades.length]);
+  }
+  ctx.globalCompositeOperation = 'screen';
+
+  // Weighted to the rim rather than spread over the whole surface. Interference
+  // shows where the film is thin and the surface turns away, which in projection
+  // is the edge — filling the body with it evenly gave mint a pink cast it has
+  // nowhere in the reference. A wide clipped stroke puts it exactly there, since
+  // clipping throws away the outer half.
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = iris;
+  ctx.lineWidth = unit * 0.34;
+  trace();
+  ctx.stroke();
+
+  // ...and a whisper of it across everything else, so the two are one surface.
+  ctx.globalAlpha *= 0.30;
+  ctx.fillStyle = iris;
+  ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
+  ctx.globalAlpha /= 0.30;
+  ctx.globalCompositeOperation = 'source-over';
 
   // 2 — the iridescent band. Stroked on the path itself and clipped, so half the
   // stroke is thrown away and what is left is a band on the inside of the edge.
@@ -390,7 +515,8 @@ function glossy(ctx, trace, { skin, t, seed = 0, unit = 1, box }) {
   shell(0.055, bandGrad(drift, 0.80));               // the iridescent band
   shell(0.022, bandGrad(drift + 0.42, 0.95));        // a second, tighter band
   ctx.globalCompositeOperation = 'screen';
-  shell(0.009, bandGrad(drift + 0.18, 0.90));        // specular right at the edge
+  shell(0.009, bandGrad(drift + 0.18, 0.90));        // the skin's own edge colour
+  shell(0.006, scaleAlpha(mat.edgeHighlight, mat.gloss));   // and the material's
   ctx.restore();
 
   // 3 — the contour, outside the clip so it stays crisp. Cool and thin, not a
@@ -456,21 +582,29 @@ function creases(ctx, skin, armLift) {
  * Speculars. The dome gets the big soft one; the limbs get streaks along their
  * length, which is what stops them reading as flat in the reference.
  */
-function highlights(ctx, skin) {
+function highlights(ctx, skin, mat) {
   /**
    * A soft streak: an ellipse filled with a radial falloff rather than a flat
    * colour. Solid-filled ellipses on the dome read as horns; the same shapes
    * with a gradient read as a curved surface catching a window.
    */
-  const sheen = (x, y, rx, ry, rot, alpha, colour = '#FFFFFF') => {
+  //
+  // `--bubble-blur` sets how soft they are. It is spent on the gradient's falloff
+  // rather than on a real `ctx.filter` blur, because a filter's radius is not
+  // reliably independent of the current transform across browsers, and this
+  // canvas is scaled by the body unit — the same declared radius would come out a
+  // different softness at every canvas size.
+  const soft = Math.max(0, Math.min(0.9, mat.blur / 22));
+  const sheen = (x, y, rx, ry, rot, alpha, colour = mat.highlight) => {
+    const a = alpha * mat.gloss;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
     ctx.scale(rx, ry);
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    g.addColorStop(0, withAlpha(colour, alpha));
-    g.addColorStop(0.45, withAlpha(colour, alpha * 0.72));
-    g.addColorStop(1, withAlpha(colour, 0));
+    g.addColorStop(0, scaleAlpha(colour, a));
+    g.addColorStop(Math.max(0.12, 0.62 - soft * 0.5), scaleAlpha(colour, a * 0.6));
+    g.addColorStop(1, scaleAlpha(colour, 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(0, 0, 1, 0, TAU);
@@ -607,6 +741,10 @@ export function createBuddy(canvas, opts = {}) {
     energy: opts.energy ?? 0.55,
     aura: opts.aura !== false,
     skin: skinFor(opts.skin),
+    // Read once and cached. getComputedStyle is not cheap enough for a per-frame
+    // call, and these tokens are global — they do not vary by colour scheme — so
+    // refreshing alongside resize() is enough.
+    material: MATERIAL_DEFAULTS,
     // Logo mode draws the aura and one plain bubble to sit behind the wordmark —
     // no face, no limbs. Same material, so the mark and the character can never
     // drift apart.
@@ -630,6 +768,7 @@ export function createBuddy(canvas, opts = {}) {
   let busyUntil = 0;
 
   function resize() {
+    state.material = readMaterial();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rect = canvas.getBoundingClientRect();
     w = rect.width || 260;
@@ -701,6 +840,7 @@ export function createBuddy(canvas, opts = {}) {
     // Sized to the full reach, not the resting width, so a cheer stays in frame.
     const u = Math.min(w / (MAX_HALF_WIDTH * 2), h / 2.80);
     const skin = state.skin;
+    const mat = state.material;
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -711,9 +851,11 @@ export function createBuddy(canvas, opts = {}) {
       // One soft bubble, breathing, for the wordmark to sit in front of. Still in
       // pixel units here — the body-unit scale happens further down.
       const r = u * (1.05 + breathe * 0.5);
+      ctx.globalAlpha = mat.opacity;
       glossy(ctx, () => circlePath(ctx, 0, 0, r), {
-        skin, t: time, seed: 0, unit: r, box: { cx: 0, cy: 0, rx: r, ry: r },
+        skin, mat, t: time, seed: 0, unit: r, box: { cx: 0, cy: 0, rx: r, ry: r },
       });
+      ctx.globalAlpha = 1;
       ctx.restore();
       return;
     }
@@ -726,20 +868,37 @@ export function createBuddy(canvas, opts = {}) {
       (1 - breathe - squash.value * 0.035) * u
     );
 
-    // ground shadow, so she reads as standing on something
-    ctx.fillStyle = 'rgba(60,40,70,0.055)';
+    // Ground shadow, so she reads as standing on something. The material names
+    // the colour; the falloff is the renderer's job — flat-filled at this alpha
+    // it reads as a grey blob parked under her rather than as contact.
+    ctx.save();
+    ctx.translate(0, 1.28);
+    ctx.scale(0.50, 0.085);
+    const shade = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    shade.addColorStop(0, mat.shadow);
+    shade.addColorStop(0.55, scaleAlpha(mat.shadow, 0.55));
+    shade.addColorStop(1, scaleAlpha(mat.shadow, 0));
+    ctx.fillStyle = shade;
     ctx.beginPath();
-    ctx.ellipse(0, 1.28, 0.46, 0.075, 0, 0, TAU);
+    ctx.arc(0, 0, 1, 0, TAU);
     ctx.fill();
+    ctx.restore();
 
     const arm = armLift.value;
     const trace = () => traceOutline(ctx, arm);
+    // The shell itself is translucent — you should see the background through
+    // her. The face stays fully opaque outside this block, because eyes that
+    // fade into the wallpaper stop reading as eyes.
+    ctx.save();
+    ctx.globalAlpha = mat.opacity;
     glossy(ctx, trace, {
-      skin, t: time, seed: 0, unit: 1,
+      skin, mat, t: time, seed: 0, unit: 1,
       box: { cx: 0, cy: 0, rx: HALF_WIDTH, ry: BOTTOM },
     });
     creases(ctx, skin, arm);
-    highlights(ctx, skin);
+    highlights(ctx, skin, mat);
+    ctx.restore();
+
     face(ctx, -0.780, 1, state);
 
     if (puff) {
@@ -751,7 +910,7 @@ export function createBuddy(canvas, opts = {}) {
         ctx.globalAlpha = puff.alpha;
         const px = 0.42 + puff.x, py = -0.52 + puff.y;
         glossy(ctx, () => circlePath(ctx, px, py, puff.r), {
-          skin, t: time, seed: 8, unit: puff.r,
+          skin, mat, t: time, seed: 8, unit: puff.r,
           box: { cx: px, cy: py, rx: puff.r, ry: puff.r },
         });
         ctx.globalAlpha = 1;

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -93,4 +94,73 @@ test('the arm swing moves the arm and leaves the rest alone', () => {
   assert.notDeepEqual(rest[2], up[2]);
   // and the torso below it is untouched
   assert.deepEqual(rest.at(-1), up.at(-1));
+});
+
+/* ------------------------------------------------------------- the material */
+
+const { parseMaterial, MATERIAL_DEFAULTS } = await import('../js/buddy.js');
+
+const reader = (map) => (name) => map[name] ?? '';
+
+test('the material reads the tokens', () => {
+  const m = parseMaterial(reader({
+    '--bubble-opacity': ' 0.5 ',
+    '--bubble-highlight': 'rgba(1,2,3,0.4)',
+    '--bubble-edge-highlight': '#ABCDEF',
+    '--bubble-shadow': 'rgb(9, 8, 7)',
+    '--bubble-iridescent-pink': 'rgba(255,0,0,0.1)',
+    '--bubble-blur': '4px',
+    '--bubble-gloss': '1.2',
+  }));
+  assert.equal(m.opacity, 0.5);
+  assert.equal(m.highlight, 'rgba(1,2,3,0.4)');
+  assert.equal(m.edgeHighlight, '#ABCDEF');
+  assert.equal(m.shadow, 'rgb(9, 8, 7)');
+  assert.equal(m.blur, 4);
+  assert.equal(m.gloss, 1.2);
+  assert.equal(m.iridescent[0], 'rgba(255,0,0,0.1)');
+  // the three not supplied fall back individually, not as a block
+  assert.equal(m.iridescent[1], MATERIAL_DEFAULTS.iridescent[1]);
+});
+
+test('a missing stylesheet gives the defaults, not a blank creature', () => {
+  // This is the failure that matters: an unparsed --bubble-opacity would reach
+  // globalAlpha as NaN, and a NaN globalAlpha draws absolutely nothing.
+  for (const broken of [{}, { '--bubble-opacity': 'wat' }, { '--bubble-opacity': '' }]) {
+    const m = parseMaterial(reader(broken));
+    assert.equal(m.opacity, MATERIAL_DEFAULTS.opacity);
+    assert.ok(Number.isFinite(m.opacity));
+  }
+});
+
+test('nonsense colours fall back rather than drawing invisibly', () => {
+  const m = parseMaterial(reader({
+    '--bubble-highlight': 'not-a-colour',
+    '--bubble-shadow': '   ',
+    '--bubble-iridescent-blue': 'rgba(oops)',
+  }));
+  assert.equal(m.highlight, MATERIAL_DEFAULTS.highlight);
+  assert.equal(m.shadow, MATERIAL_DEFAULTS.shadow);
+  assert.equal(m.iridescent[1], MATERIAL_DEFAULTS.iridescent[1]);
+});
+
+test('material numbers are clamped to something drawable', () => {
+  const m = parseMaterial(reader({
+    '--bubble-opacity': '9', '--bubble-gloss': '-3', '--bubble-blur': '-1',
+  }));
+  assert.equal(m.opacity, 1);
+  assert.equal(m.gloss, 0);
+  assert.equal(m.blur, 0);
+});
+
+test('every material token in tokens.css is one the renderer reads', async () => {
+  // Catches the quiet failure of a token being renamed in one file only.
+  const css = await readFile(new URL('../styles/tokens.css', import.meta.url), 'utf8');
+  const declared = [...css.matchAll(/(--bubble-[a-z-]+)\s*:/g)].map((m) => m[1]);
+  assert.ok(declared.length >= 10, `only found ${declared.length} bubble tokens`);
+
+  const src = await readFile(new URL('../js/buddy.js', import.meta.url), 'utf8');
+  for (const name of declared) {
+    assert.ok(src.includes(`'${name}'`), `${name} is declared but never read`);
+  }
 });
