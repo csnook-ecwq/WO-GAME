@@ -6,7 +6,7 @@
  */
 
 import * as store from './store.js';
-import { createBuddy, greeting, auraEnergy } from './buddy.js';
+import { createBuddy, greeting, auraEnergy, SKINS } from './buddy.js';
 import { pickAffirmation } from './affirmations.js';
 
 const h = (tag, cls, text) => {
@@ -207,6 +207,7 @@ export function renderHome(profileId, ctl) {
   const buddy = createBuddy(canvas, {
     mood: g.mood,
     energy: auraEnergy(dots, today),
+    skin: p.skin,
   });
   requestAnimationFrame(() => {
     buddy.start();
@@ -400,6 +401,41 @@ export function renderSettings(profileId, ctl) {
   };
   nameRow.append(nameField, roll);
   bud.box.append(row('Name', null), nameRow);
+
+  // Colour, with her standing right there. Same principle as the scheme dots:
+  // tapping changes the real creature, not a stamp-sized preview of one.
+  const skinRow = h('div', 'buddy-skins');
+  const preview = h('canvas', 'buddy-preview');
+  const previewBuddy = createBuddy(preview, {
+    mood: 'content', aura: false, skin: p.skin || 'pearl',
+  });
+  requestAnimationFrame(() => previewBuddy.start());
+  s.addEventListener('screen:leave', () => previewBuddy.stop());
+
+  const swatches = h('div', 'skin-dots');
+  for (const sk of SKINS) {
+    const b = h('button', 'skin-dot');
+    b.title = sk.name;
+    b.setAttribute('aria-label', sk.name);
+    b.setAttribute('aria-selected', String((p.skin || 'pearl') === sk.id));
+    // Built from the skin's own wash and a mid band, so a new colourway needs no
+    // matching stylesheet entry — it just appears. Wash rather than bands alone,
+    // or peach comes out pink: its band sweep passes through magenta.
+    b.style.background =
+      `radial-gradient(circle at 34% 28%, rgba(255,255,255,0.94), ` +
+      `${sk.bands[2]} 52%, ${sk.wash} 100%)`;
+    b.onclick = () => {
+      store.updateProfile(profileId, { skin: sk.id });
+      previewBuddy.setSkin(sk.id);
+      previewBuddy.poke();
+      [...swatches.children].forEach((c) =>
+        c.setAttribute('aria-selected', String(c.title === sk.name)));
+    };
+    swatches.appendChild(b);
+  }
+  skinRow.append(preview, swatches);
+  bud.box.append(row('Colour', null), skinRow);
+
   bud.box.appendChild(h('p', 'set-note faint',
     `Your avatar is always ${store.avatarName(p.name)}.`));
   scroll.appendChild(bud.wrap);

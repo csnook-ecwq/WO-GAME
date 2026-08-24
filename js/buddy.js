@@ -51,6 +51,73 @@ export const SKINS = [
     contour: 'rgba(150,132,178,0.42)',
     specular: 'rgba(255,255,255,0.92)',
   },
+
+  /* The five from the colourway sheets. Each wash is the sheet's dominant
+   * chromatic colour, solved back through the interior alpha so it lands there
+   * over the app's own background rather than over the sheet's cream.
+   *
+   * The bands are a reconstruction rather than a straight reading, and it is
+   * worth being clear about which. Those sheets are monochrome — the whole
+   * figure sits in a narrow slice of the hue circle — so the edge yields only
+   * two to four distinct hues, nowhere near enough to cycle. Iridescence *is* a
+   * hue sweep, so each set sweeps around the measured base and folds back in the
+   * genuinely off-hue accents the sheet does contain: blossom's lilac, sky's
+   * violet. Measured where measuring works; derived where it doesn't. */
+  {
+    id: 'blossom',
+    name: 'Blossom',
+    wash: '#E46EA8',
+    bands: [
+      '#D3C7E7', '#E8C2F9', '#F4B1F0', '#EFA0CE',
+      '#EFA0B2', '#F4BAB1', '#F9DDC2',
+    ],
+    contour: 'rgba(183,65,123,0.42)',
+    specular: 'rgba(255,255,255,0.92)',
+  },
+  {
+    id: 'sky',
+    name: 'Sky',
+    wash: '#43B6FF',
+    bands: [
+      '#B4FDD9', '#9FF8EC', '#8BDCF3', '#8BB6F3',
+      '#9FA4F8', '#CAB4FD', '#E3D5FB',
+    ],
+    contour: 'rgba(22,137,210,0.42)',
+    specular: 'rgba(255,255,255,0.92)',
+  },
+  {
+    id: 'peach',
+    name: 'Peach',
+    wash: '#FA7C39',
+    bands: [
+      '#FFA7D8', '#FD93AF', '#F9857F', '#F49B6C',
+      '#F9CD7F', '#FDF793', '#EAFFA7',
+    ],
+    contour: 'rgba(205,79,12,0.42)',
+    specular: 'rgba(255,255,255,0.92)',
+  },
+  {
+    id: 'mint',
+    name: 'Mint',
+    wash: '#67C7A2',
+    bands: [
+      '#F4F3D1', '#DDF4CA', '#D4EAC6', '#B7E4B9',
+      '#A8DEC3', '#B7E4E2', '#C6DCEA',
+    ],
+    contour: 'rgba(58,154,117,0.42)',
+    specular: 'rgba(255,255,255,0.92)',
+  },
+  {
+    id: 'butter',
+    name: 'Butter',
+    wash: '#ECB931',
+    bands: [
+      '#FCA5B7', '#F89A91', '#F4AC7E', '#F0C66B',
+      '#F4F27E', '#DAF891', '#C9FCA5',
+    ],
+    contour: 'rgba(191,140,4,0.42)',
+    specular: 'rgba(255,255,255,0.92)',
+  },
 ];
 
 const SKIN_BY_ID = new Map(SKINS.map((s) => [s.id, s]));

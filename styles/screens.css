@@ -503,3 +503,36 @@
 .buddy-name-row { display: flex; gap: var(--gap-sm); align-items: center; padding-bottom: var(--gap-sm); }
 .buddy-name-input { flex: 1; max-width: none; text-align: left; }
 .roll-btn { min-height: 42px; padding: 0 16px; font-size: var(--t-label); flex: none; }
+
+/* The skin picker: her creature at thumb size with the colourways beside her,
+   so a tap changes the thing itself rather than a swatch that stands for it. */
+.buddy-skins {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: var(--gap-sm);
+}
+.buddy-preview {
+  width: 64px;
+  height: 96px;
+  flex: none;
+}
+/* One row, however many colourways there are: they shrink to fit rather than
+   wrapping into a ragged second line. */
+.skin-dots {
+  display: flex;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+.skin-dot {
+  flex: 1 1 0;
+  min-width: 0;
+  aspect-ratio: 1;
+  max-width: 38px;
+  border-radius: var(--r-full);
+  border: 2px solid transparent;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.16s var(--ease);
+}
+.skin-dot[aria-selected="true"] { border-color: var(--ink); transform: scale(1.1); }
