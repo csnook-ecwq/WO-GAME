@@ -15,7 +15,9 @@ test('every skin is complete enough to draw with', () => {
     assert.match(s.id, /^[a-z][a-z0-9-]*$/, `${s.id}: id should be a slug`);
     assert.ok(s.name && s.name.length, `${s.id}: needs a display name`);
     assert.match(s.wash, HEX, `${s.id}: wash must be a six-digit hex`);
-    assert.ok(s.contour, `${s.id}: needs a contour colour`);
+    // `base` is the colour from the master spec — what the middle of her body
+    // should look like. `wash` is only the paint that gets there.
+    assert.match(s.base, HEX, `${s.id}: base must be a six-digit hex`);
     // Fewer than three bands and the "iridescence" is just a gradient.
     assert.ok(s.bands.length >= 3, `${s.id}: needs at least three bands`);
     for (const b of s.bands) assert.match(b, HEX, `${s.id}: band ${b} is not hex`);
@@ -30,7 +32,7 @@ test('skin ids are unique', () => {
 test('an unknown skin falls back rather than drawing nothing', () => {
   assert.equal(skinFor('does-not-exist'), SKINS[0]);
   assert.equal(skinFor(undefined), SKINS[0]);
-  assert.equal(skinFor('pearl').id, 'pearl');
+  assert.equal(skinFor('pink').id, 'pink');
 });
 
 /** Sample a cubic bezier, so control points are checked and not just endpoints. */

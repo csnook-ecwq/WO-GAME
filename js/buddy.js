@@ -30,92 +30,43 @@ export const MOODS = ['happy', 'content', 'excited', 'sleepy', 'squint', 'sulk']
  * Every colourway is one entry. The renderer never learns a colour name, so
  * adding a hue is adding an object here and nothing else.
  *
- * All six are measured, not invented, and all six come out of the same pipeline:
- * each reference photograph is decoded, its silhouette found, its interior taken
- * as the median of a grid across the lower torso — low enough to miss the dome
- * specular — and its bands read off a ring just inside the outline, all the way
- * round, where the interference colours actually live.
+ * `base` is the colour from the master spec: what the middle of her body should
+ * actually look like. `wash` is solved backwards from it and is not meant to be
+ * read by eye — two alphas stack before it reaches the screen, the interior
+ * gradient's centre stop and --bubble-opacity, so the paint has to be far more
+ * saturated than the result it produces.
  *
- * `wash` is then solved rather than picked, and solved for the *ratio* rather
- * than the colour. A bubble is a filter: what it does is multiply whatever is
- * behind it. So each entry reproduces how much its reference darkened its own
- * ground, applied to this app's background. Matching absolute colours instead
- * turns pearl into charcoal, because her lilac reference stands on cream while
- * the app stands on near-white.
- *
- * The band search relaxes its thresholds until each skin yields seven. Peach and
- * butter are genuinely narrow-hue objects — their whole interference range sits
- * in a slice a fifth the width of blossom's — so fixed thresholds would hand back
- * two bands for them and seven for the others.
+ * `bands` stay measured off the close-up photographs: a ring sampled just inside
+ * the silhouette, all the way round, where the interference colours live. The
+ * spec asks for these to be very subtle, and they are drawn that way.
  */
 
 export const SKINS = [
   {
-    id: 'pearl',
-    name: 'Pearl',
-    wash: '#908FBF',
-    bands: [
-      '#C8EDF8', '#BFD0E6', '#B1B8DA', '#B5AAD8',
-      '#D8C1ED', '#F4D0BF', '#F6E5C8',
-    ],
-    contour: 'rgba(124,123,171,0.32)',
-    specular: 'rgba(255,255,255,0.92)',
-  },   // interior #C4B9C1 on #E8DAD1 -> #D6D1E0 here, 7 bands
+    id: 'pink', name: 'Pink', base: '#EDCCE7', wash: '#CD77CF',
+    bands: ['#D5B0EB', '#E3BDE8', '#FEC4F7', '#ECABD6',
+            '#EEA8C3', '#F9BEC6', '#F8D9D0'],
+  },
   {
-    id: 'blossom',
-    name: 'Blossom',
-    wash: '#C852A8',
-    bands: [
-      '#D5B0EB', '#E3BDE8', '#FEC4F7', '#ECABD6',
-      '#EEA8C3', '#F9BEC6', '#F8D9D0',
-    ],
-    contour: 'rgba(180,62,148,0.32)',
-    specular: 'rgba(255,255,255,0.92)',
-  },   // interior #EABED9 on #FDFAF4 -> #EABBD8 here, 7 bands
+    id: 'blue', name: 'Blue', base: '#D0E9EF', wash: '#75CFE7',
+    bands: ['#D2FDFD', '#A1EFFE', '#99CAED', '#B7D6FE',
+            '#CDD9FE', '#D6DAFE', '#DBD9FF'],
+  },
   {
-    id: 'sky',
-    name: 'Sky',
-    wash: '#51B7F3',
-    bands: [
-      '#D2FDFD', '#A1EFFE', '#99CAED', '#B7D6FE',
-      '#CDD9FE', '#D6DAFE', '#DBD9FF',
-    ],
-    contour: 'rgba(61,163,223,0.32)',
-    specular: 'rgba(255,255,255,0.92)',
-  },   // interior #BFE2F6 on #FDF9F6 -> #BFDFF3 here, 7 bands
+    id: 'peach', name: 'Peach', base: '#F8DACF', wash: '#EEA186',
+    bands: ['#FDD1D9', '#FCCBCC', '#FEC6B8', '#F7B28D',
+            '#FED3A9', '#FCF0D5', '#FAF8E3'],
+  },
   {
-    id: 'peach',
-    name: 'Peach',
-    wash: '#FD865E',
-    bands: [
-      '#FDD1D9', '#FCCBCC', '#FEC6B8', '#F7B28D',
-      '#FED3A9', '#FCF0D5', '#FAF8E3',
-    ],
-    contour: 'rgba(233,114,74,0.32)',
-    specular: 'rgba(255,255,255,0.92)',
-  },   // interior #FED2BF on #FEFBF5 -> #FDCEBD here, 7 bands
+    id: 'mint', name: 'Mint', base: '#D8EFEB', wash: '#8DE1DB',
+    bands: ['#E4F0CA', '#E0FAC9', '#D0F2C7', '#BEF1C4',
+            '#A6F1C3', '#9EF4D4', '#C4FDF4'],
+  },
   {
-    id: 'mint',
-    name: 'Mint',
-    wash: '#54BD9D',
-    bands: [
-      '#E4F0CA', '#E0FAC9', '#D0F2C7', '#BEF1C4',
-      '#A6F1C3', '#9EF4D4', '#C4FDF4',
-    ],
-    contour: 'rgba(64,169,137,0.32)',
-    specular: 'rgba(255,255,255,0.92)',
-  },   // interior #C1E6D5 on #FEFBF4 -> #C0E1D4 here, 7 bands
-  {
-    id: 'butter',
-    name: 'Butter',
-    wash: '#E7B23C',
-    bands: [
-      '#F9EEE6', '#F7E9D7', '#F6D48D', '#FEE991',
-      '#FDFBD5', '#F3F4E3', '#EEF5E3',
-    ],
-    contour: 'rgba(211,158,40,0.32)',
-    specular: 'rgba(255,255,255,0.92)',
-  },   // interior #F5E1B2 on #FDFAF4 -> #F5DDB1 here, 7 bands
+    id: 'cream', name: 'Cream', base: '#F4F0D7', wash: '#E2E49E',
+    bands: ['#F9EEE6', '#F7E9D7', '#F6D48D', '#FEE991',
+            '#FDFBD5', '#F3F4E3', '#EEF5E3'],
+  },
 ];
 
 const SKIN_BY_ID = new Map(SKINS.map((s) => [s.id, s]));
@@ -259,29 +210,32 @@ function readMaterial() {
  * figure is 1.46 wide and 2.40 tall, centred on the origin.
  *
  *   apex          y = -1.20
- *   dome          ±0.455 at its widest — a shade narrower than the hips
+ *   dome          ±0.477 at its widest — a shade narrower than the hips
  *   shoulder      y = -0.40   where the arm starts to swell outward
- *   arm outer         ±0.745  at its widest, y ≈ +0.26
- *   arm tip       y = +0.56
- *   hips              ±0.50
- *   leg arch apex y = +0.73, half-width 0.147
+ *   arm outer         ±0.720  at its widest, y ≈ +0.25
+ *   arm tip       y = +0.54
+ *   hips              ±0.52
+ *   leg arch apex y = +0.636, half-width 0.152
  *   feet          y = +1.20
+ *
+ * Which satisfies the master spec: total width 1.44 is 60% of the 2.40 height,
+ * and each arm reaches 0.20 past the torso — 14% of the total width.
  */
 
 export const TOP = -1.20;
 export const BOTTOM = 1.20;
 
 /** How far the resting silhouette reaches. Gradients are sized to this. */
-export const HALF_WIDTH = 0.75;
+export const HALF_WIDTH = 0.72;
 
 /**
  * How far she reaches with both arms up. The canvas is sized to this, not to
  * HALF_WIDTH, or a full cheer clips against the edge.
  */
-export const MAX_HALF_WIDTH = 0.79;
+export const MAX_HALF_WIDTH = 0.77;
 
 /** Where the outline leaves the torso and the arm begins. */
-const SHOULDER = [0.475, -0.40];
+const SHOULDER = [0.500, -0.40];
 
 /** Distance from the shoulder to the arm tip, for weighting the swing. */
 const ARM_SPAN = 0.96;
@@ -321,30 +275,31 @@ export function halfOutline(armLift = 0) {
 
   const arm = [
     // swell outward from the shoulder to the widest point
-    [...R(0.562, -0.270), ...R(0.746, 0.010), ...R(0.750, 0.260)],
+    [...R(0.580, -0.270), ...R(0.716, 0.010), ...R(0.720, 0.250)],
     // the outer half of the rounded tip
-    [...R(0.752, 0.430), ...R(0.716, 0.556), ...R(0.606, 0.560)],
+    [...R(0.722, 0.410), ...R(0.690, 0.532), ...R(0.600, 0.536)],
     // Back up the underside into a real notch. The reference's arms read as
     // separate lobes because there is a visible tuck here; without the depth
     // they merge into the torso and the whole thing becomes one slab.
-    [...R(0.524, 0.566), ...R(0.482, 0.516), 0.474, 0.462],
+    [...R(0.534, 0.542), ...R(0.506, 0.500), 0.498, 0.452],
   ];
 
   return [
     // The dome. Broad and low rather than tall and tapered — only a shade
     // narrower than the hips, which is what the reference actually measures at.
-    [0.168, -1.200, 0.450, -1.018, 0.455, -0.700],
+    [0.176, -1.200, 0.472, -1.018, 0.477, -0.700],
     // down the side of the head, widening into the shoulder
-    [0.462, -0.598, 0.470, -0.488, SHOULDER[0], SHOULDER[1]],
+    [0.485, -0.598, 0.493, -0.488, SHOULDER[0], SHOULDER[1]],
     ...arm,
     // the torso, wider at the hip so she sits rather than floats
-    [0.486, 0.720, 0.500, 0.900, 0.500, 1.040],
-    // the outside of the foot
-    [0.500, 1.152, 0.438, 1.200, 0.346, 1.200],
+    [0.508, 0.720, 0.520, 0.900, 0.520, 1.040],
+    // the outside of the foot — rounded, never shoe-shaped
+    [0.520, 1.154, 0.456, 1.200, 0.360, 1.200],
     // the inside of the foot
-    [0.244, 1.200, 0.162, 1.160, 0.147, 1.060],
-    // up into the arch between the legs
-    [0.142, 0.880, 0.100, 0.730, 0.000, 0.730],
+    [0.254, 1.200, 0.166, 1.156, 0.152, 1.040],
+    // Up into the arch. It opens at 23% of her height above the floor, which is
+    // the middle of the spec's 22-25% band.
+    [0.148, 0.830, 0.104, 0.636, 0.000, 0.636],
   ];
 }
 
@@ -409,15 +364,22 @@ function glossy(ctx, trace, { skin, mat, t, seed = 0, unit = 1, box }) {
   ctx.save();
   trace();
   ctx.clip();
-  const wash = ctx.createLinearGradient(0, cy - ry, 0, cy + ry);
-  // A narrow spread on purpose. The wash for a dark skin is a dark colour, so an
-  // alpha range that reads as a gentle gradient on a pale one blows the bottom of
-  // a dark one out towards black.
-  wash.addColorStop(0, withAlpha(skin.wash, 0.33));
-  wash.addColorStop(0.45, withAlpha(skin.wash, 0.36));
-  wash.addColorStop(1, withAlpha(skin.wash, 0.40));
+  // Colour gathers in the middle and clears toward the perimeter, which is the
+  // spec's central material note and the opposite of how this was built before —
+  // it used to be near-uniform with the colour living at the rim.
+  ctx.save();
+  ctx.translate(cx, cy - ry * 0.06);
+  ctx.scale(rx * 1.72, ry * 1.20);
+  const wash = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  wash.addColorStop(0, withAlpha(skin.wash, 0.46));
+  wash.addColorStop(0.42, withAlpha(skin.wash, 0.38));
+  wash.addColorStop(0.78, withAlpha(skin.wash, 0.19));
+  wash.addColorStop(1, withAlpha(skin.wash, 0.09));
   ctx.fillStyle = wash;
-  ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, TAU);
+  ctx.fill();
+  ctx.restore();
 
   // A broad internal reflection across the upper body, which is most of what
   // makes the reference look like a volume rather than a flat fill.
@@ -511,23 +473,24 @@ function glossy(ctx, trace, { skin, mat, t, seed = 0, unit = 1, box }) {
     ctx.stroke();
   };
 
-  shell(0.085, withAlpha(skin.wash, 0.34));          // inner surface of the shell
-  shell(0.055, bandGrad(drift, 0.80));               // the iridescent band
-  shell(0.022, bandGrad(drift + 0.42, 0.95));        // a second, tighter band
+  // The perimeter is meant to read *clearer* than the middle, so there is no
+  // darkening pass here any more — only light. The bands are down to a whisper:
+  // the spec asks for very subtle iridescence along the edges, and what used to
+  // be a 0.80 band was reading as colour rather than as a hint of one.
   ctx.globalCompositeOperation = 'screen';
-  shell(0.009, bandGrad(drift + 0.18, 0.90));        // the skin's own edge colour
-  shell(0.006, scaleAlpha(mat.edgeHighlight, mat.gloss));   // and the material's
+  shell(0.048, bandGrad(drift, 0.34));               // the iridescent band
+  shell(0.020, bandGrad(drift + 0.42, 0.42));        // a second, tighter band
+
+  // The rim light. This is what defines the form now that nothing is outlined:
+  // a translucent object with a clear perimeter and no edge light at all stops
+  // having a silhouette, and the arms simply dissolve into the torso.
+  shell(0.034, scaleAlpha(mat.edgeHighlight, 0.55 * mat.gloss));
+  shell(0.010, scaleAlpha(mat.edgeHighlight, 1.15 * mat.gloss));
   ctx.restore();
 
-  // 3 — the contour, outside the clip so it stays crisp. Cool and thin, not a
-  // white outline: the reference has no white line around it anywhere.
-  ctx.save();
-  ctx.lineJoin = 'round';
-  trace();
-  ctx.strokeStyle = skin.contour;
-  ctx.lineWidth = unit * 0.013;
-  ctx.stroke();
-  ctx.restore();
+  // No contour. The spec says no outline, and it is right: a stroke around the
+  // silhouette is the single thing that most makes a soft translucent object
+  // read as a sticker of one.
 }
 
 /**
@@ -612,21 +575,22 @@ function highlights(ctx, skin, mat) {
     ctx.restore();
   };
 
-  // the dome
-  sheen(-0.252, -0.880, 0.052, 0.215, -0.16, 0.62);
-  sheen(-0.172, -0.600, 0.028, 0.070, -0.16, 0.32);
-  sheen(0.244, -0.910, 0.034, 0.105, 0.20, 0.26);
+  // Soft studio lighting: diffuse and frontal, with the specular on the right.
+  // The dome keeps a gentler left sheen as the fill light.
+  sheen(0.268, -0.870, 0.058, 0.235, 0.15, 0.60);
+  sheen(0.196, -0.575, 0.030, 0.078, 0.15, 0.30);
+  sheen(-0.238, -0.905, 0.036, 0.115, -0.19, 0.26);
 
   // the arms
-  sheen(-0.652, 0.150, 0.030, 0.180, -0.08, 0.36);
-  sheen(0.652, 0.150, 0.030, 0.180, 0.08, 0.24);
+  sheen(0.630, 0.140, 0.032, 0.175, 0.08, 0.36);
+  sheen(-0.630, 0.140, 0.030, 0.175, -0.08, 0.22);
 
   // the legs
-  sheen(-0.338, 0.965, 0.032, 0.125, 0, 0.28);
-  sheen(0.338, 0.965, 0.032, 0.125, 0, 0.20);
+  sheen(0.352, 0.955, 0.034, 0.122, 0, 0.28);
+  sheen(-0.352, 0.955, 0.032, 0.122, 0, 0.19);
 
-  // a cool counter-light down the right edge, the way the reference has it
-  sheen(0.406, -0.320, 0.028, 0.300, 0.06, 0.32, skin.bands[5]);
+  // a cool counter-light down the left edge, so she is not lit from one side only
+  sheen(-0.428, -0.310, 0.028, 0.300, -0.06, 0.26, skin.bands[5]);
 }
 
 /**

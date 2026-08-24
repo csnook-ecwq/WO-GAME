@@ -179,9 +179,9 @@ export function createProfile(input) {
     // Null until she names it or rolls one. Never named for her at setup — that
     // is a decision worth letting someone make when they care about it.
     buddyName: null,
-    // Which colourway she's wearing. Everyone starts pearl; the rest arrive as
-    // entries in SKINS in buddy.js and, later, as things suds can buy.
-    skin: 'pearl',
+    // Which colourway she's wearing. Everyone starts pink; the others live in
+    // SKINS in buddy.js and, later, become things suds can buy.
+    skin: 'pink',
     suds: 0,
     sudsLedger: [],
     streak: 0,
