@@ -178,6 +178,7 @@ export const MATERIAL_DEFAULTS = {
   blur: 10,
   gloss: 0.85,
   face: 0,
+  expression: 0.6,
   ground: '#FBF8F0',
   accessory: {
     opacity: 0.64,
@@ -195,6 +196,7 @@ const MATERIAL_VARS = {
   blur: '--bubble-blur',
   gloss: '--bubble-gloss',
   face: '--bubble-face',
+  expression: '--bubble-expression',
   ground: '--bubble-ground',
 };
 
@@ -239,6 +241,7 @@ export function parseMaterial(read) {
     blur: Math.max(0, num(MATERIAL_VARS.blur, MATERIAL_DEFAULTS.blur)),
     gloss: Math.max(0, Math.min(2, num(MATERIAL_VARS.gloss, MATERIAL_DEFAULTS.gloss))),
     face: num(MATERIAL_VARS.face, MATERIAL_DEFAULTS.face) > 0,
+    expression: clamp01(num(MATERIAL_VARS.expression, D.expression)),
     ground: col(MATERIAL_VARS.ground, MATERIAL_DEFAULTS.ground),
     accessory: {
       opacity: clamp01(num(ACCESSORY_VARS.opacity, D.accessory.opacity)),
@@ -843,15 +846,20 @@ export function createBuddy(canvas, opts = {}) {
     stepSpring(lean, dt);
     stepSpring(armLift, dt);
 
+    // Every channel is scaled toward neutral by --bubble-expression. Note that
+    // bob and rate are multipliers around 1, so "less expressive" means moving
+    // them toward 1 rather than toward 0 — scaling those the same way as tilt
+    // would freeze her breathing instead of calming it.
     const post = postureFor(state.mood);
-    tilt.target = post.tilt;
-    slump.target = post.slump;
-    droop.target = post.droop;
+    const e = state.material.expression;
+    tilt.target = post.tilt * e;
+    slump.target = post.slump * e;
+    droop.target = post.droop * e;
     stepSpring(tilt, dt);
     stepSpring(slump, dt);
     stepSpring(droop, dt);
-    bob += (post.bob - bob) * Math.min(1, dt * 4);
-    rate += (post.rate - rate) * Math.min(1, dt * 4);
+    bob += ((1 + (post.bob - 1) * e) - bob) * Math.min(1, dt * 4);
+    rate += ((1 + (post.rate - 1) * e) - rate) * Math.min(1, dt * 4);
     if (Math.abs(spinVel) > 0.001) {
       spin += spinVel * dt;
       spinVel *= Math.pow(0.12, dt);

@@ -100,7 +100,7 @@ test('the arm swing moves the arm and leaves the rest alone', () => {
 
 /* ------------------------------------------------------------- the material */
 
-const { parseMaterial, MATERIAL_DEFAULTS } = await import('../js/buddy.js');
+const { parseMaterial, MATERIAL_DEFAULTS, POSTURE } = await import('../js/buddy.js');
 
 const reader = (map) => (name) => map[name] ?? '';
 
@@ -164,5 +164,25 @@ test('every material token in tokens.css is one the renderer reads', async () =>
   const src = await readFile(new URL('../js/buddy.js', import.meta.url), 'utf8');
   for (const name of declared) {
     assert.ok(src.includes(`'${name}'`), `${name} is declared but never read`);
+  }
+});
+
+test('expression scales toward neutral, and bob/rate toward one', () => {
+  // The trap this guards: bob and rate are multipliers around 1. Scaling them
+  // the same way as tilt would send them to zero at low expression, which stops
+  // her breathing rather than calming her.
+  const off = parseMaterial(reader({ '--bubble-expression': '0' }));
+  assert.equal(off.expression, 0);
+  const full = parseMaterial(reader({ '--bubble-expression': '1' }));
+  assert.equal(full.expression, 1);
+  assert.equal(parseMaterial(reader({ '--bubble-expression': '4' })).expression, 1);
+
+  for (const mood of Object.keys(POSTURE)) {
+    const p = POSTURE[mood];
+    for (const e of [0, 0.6, 1]) {
+      assert.ok(Math.abs(p.tilt * e) <= Math.abs(p.tilt) + 1e-9);
+      assert.ok(Math.abs((1 + (p.bob - 1) * e) - 1) <= Math.abs(p.bob - 1) + 1e-9);
+      assert.ok(1 + (p.rate - 1) * e > 0, `${mood} at ${e} would stop her breathing`);
+    }
   }
 });

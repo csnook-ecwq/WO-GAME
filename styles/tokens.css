@@ -185,6 +185,11 @@
   --bubble-gloss: 0.85;
 }
 
+/* How strongly a mood shows in her body. 1 is the full posture; 0 leaves her
+   neutral whatever mood she is in. With no face to carry expression this is the
+   only dial for how much she emotes, so it is worth having as one number. */
+:root { --bubble-expression: 0.6; }
+
 /* Face. The master spec says no facial features, so this is off. It is a token
    rather than deleted code because the moods, the greeting and the blink are all
    still here and still working — flipping this to 1 brings her eyes back with
