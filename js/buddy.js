@@ -30,94 +30,92 @@ export const MOODS = ['happy', 'content', 'excited', 'sleepy', 'squint', 'sulk']
  * Every colourway is one entry. The renderer never learns a colour name, so
  * adding a hue is adding an object here and nothing else.
  *
- * `pearl` is measured, not invented: the reference photograph was decoded and
- * sampled directly. Its interior reads #C6B9C4 over a #E8DAD1 ground — a muted
- * mauve rather than white — and the rim runs peach → pink → lilac → violet →
- * periwinkle → blue → yellow-green, with pure white speculars.
+ * All six are measured, not invented, and all six come out of the same pipeline:
+ * each reference photograph is decoded, its silhouette found, its interior taken
+ * as the median of a grid across the lower torso — low enough to miss the dome
+ * specular — and its bands read off a ring just inside the outline, all the way
+ * round, where the interference colours actually live.
+ *
+ * `wash` is then solved rather than picked, and solved for the *ratio* rather
+ * than the colour. A bubble is a filter: what it does is multiply whatever is
+ * behind it. So each entry reproduces how much its reference darkened its own
+ * ground, applied to this app's background. Matching absolute colours instead
+ * turns pearl into charcoal, because her lilac reference stands on cream while
+ * the app stands on near-white.
+ *
+ * The band search relaxes its thresholds until each skin yields seven. Peach and
+ * butter are genuinely narrow-hue objects — their whole interference range sits
+ * in a slice a fifth the width of blossom's — so fixed thresholds would hand back
+ * two bands for them and seven for the others.
  */
 
 export const SKINS = [
   {
     id: 'pearl',
     name: 'Pearl',
-    // Solved rather than picked: #9C8AAE at the alphas below lands on the
-    // reference's measured #C6B9C4 over its #E8DAD1 ground, to within a point
-    // on every channel.
-    wash: '#9C8AAE',
+    wash: '#908FBF',
     bands: [
-      '#FCDFC2', '#F8D8F6', '#D2B8EE', '#B3A6E4',
-      '#ACBFE7', '#C0D9F7', '#E0E8BE',
+      '#C8EDF8', '#BFD0E6', '#B1B8DA', '#B5AAD8',
+      '#D8C1ED', '#F4D0BF', '#F6E5C8',
     ],
-    contour: 'rgba(150,132,178,0.42)',
+    contour: 'rgba(124,123,171,0.32)',
     specular: 'rgba(255,255,255,0.92)',
-  },
-
-  /* The five from the colourway sheets. Each wash is the sheet's dominant
-   * chromatic colour, solved back through the interior alpha so it lands there
-   * over the app's own background rather than over the sheet's cream.
-   *
-   * The bands are a reconstruction rather than a straight reading, and it is
-   * worth being clear about which. Those sheets are monochrome — the whole
-   * figure sits in a narrow slice of the hue circle — so the edge yields only
-   * two to four distinct hues, nowhere near enough to cycle. Iridescence *is* a
-   * hue sweep, so each set sweeps around the measured base and folds back in the
-   * genuinely off-hue accents the sheet does contain: blossom's lilac, sky's
-   * violet. Measured where measuring works; derived where it doesn't. */
+  },   // interior #C4B9C1 on #E8DAD1 -> #D6D1E0 here, 7 bands
   {
     id: 'blossom',
     name: 'Blossom',
-    wash: '#E46EA8',
+    wash: '#C852A8',
     bands: [
-      '#D3C7E7', '#E8C2F9', '#F4B1F0', '#EFA0CE',
-      '#EFA0B2', '#F4BAB1', '#F9DDC2',
+      '#D5B0EB', '#E3BDE8', '#FEC4F7', '#ECABD6',
+      '#EEA8C3', '#F9BEC6', '#F8D9D0',
     ],
-    contour: 'rgba(183,65,123,0.42)',
+    contour: 'rgba(180,62,148,0.32)',
     specular: 'rgba(255,255,255,0.92)',
-  },
+  },   // interior #EABED9 on #FDFAF4 -> #EABBD8 here, 7 bands
   {
     id: 'sky',
     name: 'Sky',
-    wash: '#43B6FF',
+    wash: '#51B7F3',
     bands: [
-      '#B4FDD9', '#9FF8EC', '#8BDCF3', '#8BB6F3',
-      '#9FA4F8', '#CAB4FD', '#E3D5FB',
+      '#D2FDFD', '#A1EFFE', '#99CAED', '#B7D6FE',
+      '#CDD9FE', '#D6DAFE', '#DBD9FF',
     ],
-    contour: 'rgba(22,137,210,0.42)',
+    contour: 'rgba(61,163,223,0.32)',
     specular: 'rgba(255,255,255,0.92)',
-  },
+  },   // interior #BFE2F6 on #FDF9F6 -> #BFDFF3 here, 7 bands
   {
     id: 'peach',
     name: 'Peach',
-    wash: '#FA7C39',
+    wash: '#FD865E',
     bands: [
-      '#FFA7D8', '#FD93AF', '#F9857F', '#F49B6C',
-      '#F9CD7F', '#FDF793', '#EAFFA7',
+      '#FDD1D9', '#FCCBCC', '#FEC6B8', '#F7B28D',
+      '#FED3A9', '#FCF0D5', '#FAF8E3',
     ],
-    contour: 'rgba(205,79,12,0.42)',
+    contour: 'rgba(233,114,74,0.32)',
     specular: 'rgba(255,255,255,0.92)',
-  },
+  },   // interior #FED2BF on #FEFBF5 -> #FDCEBD here, 7 bands
   {
     id: 'mint',
     name: 'Mint',
-    wash: '#67C7A2',
+    wash: '#54BD9D',
     bands: [
-      '#F4F3D1', '#DDF4CA', '#D4EAC6', '#B7E4B9',
-      '#A8DEC3', '#B7E4E2', '#C6DCEA',
+      '#E4F0CA', '#E0FAC9', '#D0F2C7', '#BEF1C4',
+      '#A6F1C3', '#9EF4D4', '#C4FDF4',
     ],
-    contour: 'rgba(58,154,117,0.42)',
+    contour: 'rgba(64,169,137,0.32)',
     specular: 'rgba(255,255,255,0.92)',
-  },
+  },   // interior #C1E6D5 on #FEFBF4 -> #C0E1D4 here, 7 bands
   {
     id: 'butter',
     name: 'Butter',
-    wash: '#ECB931',
+    wash: '#E7B23C',
     bands: [
-      '#FCA5B7', '#F89A91', '#F4AC7E', '#F0C66B',
-      '#F4F27E', '#DAF891', '#C9FCA5',
+      '#F9EEE6', '#F7E9D7', '#F6D48D', '#FEE991',
+      '#FDFBD5', '#F3F4E3', '#EEF5E3',
     ],
-    contour: 'rgba(191,140,4,0.42)',
+    contour: 'rgba(211,158,40,0.32)',
     specular: 'rgba(255,255,255,0.92)',
-  },
+  },   // interior #F5E1B2 on #FDFAF4 -> #F5DDB1 here, 7 bands
 ];
 
 const SKIN_BY_ID = new Map(SKINS.map((s) => [s.id, s]));
@@ -320,9 +318,12 @@ function glossy(ctx, trace, { skin, t, seed = 0, unit = 1, box }) {
   trace();
   ctx.clip();
   const wash = ctx.createLinearGradient(0, cy - ry, 0, cy + ry);
-  wash.addColorStop(0, withAlpha(skin.wash, 0.30));
+  // A narrow spread on purpose. The wash for a dark skin is a dark colour, so an
+  // alpha range that reads as a gentle gradient on a pale one blows the bottom of
+  // a dark one out towards black.
+  wash.addColorStop(0, withAlpha(skin.wash, 0.33));
   wash.addColorStop(0.45, withAlpha(skin.wash, 0.36));
-  wash.addColorStop(1, withAlpha(skin.wash, 0.44));
+  wash.addColorStop(1, withAlpha(skin.wash, 0.40));
   ctx.fillStyle = wash;
   ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
 
