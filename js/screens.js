@@ -8,6 +8,8 @@
 import * as store from './store.js';
 import { createBuddy, greeting, auraEnergy, SKINS } from './buddy.js';
 import { pickAffirmation } from './affirmations.js';
+import { zoneFor, pickPlayer, isReady } from './zone.js';
+import { createCamera, FAILURES } from './pose.js';
 
 const h = (tag, cls, text) => {
   const el = document.createElement(tag);
@@ -675,5 +677,143 @@ export function renderOnboarding(ctl) {
   };
 
   paint();
+  return s;
+}
+
+/* --------------------------------------------------------------- the camera
+ *
+ * Framing comes before anything else can. You read the rules, you press
+ * Continue, and only then does the camera open — nothing switches on behind
+ * your back.
+ */
+
+export function renderFraming(profileId, ctl) {
+  const p = store.profile(profileId);
+  const s = h('section', 'screen framing');
+
+  const back = h('button', 'icon-btn framing-back', '‹');
+  back.setAttribute('aria-label', 'Back');
+  back.onclick = () => ctl.back();
+  s.appendChild(back);
+
+  /* ---- the rules card, first and on its own */
+  const rules = h('div', 'card glass rules');
+  rules.append(
+    h('h1', 'title', 'Glute bridge'),
+    h('p', 'rules-hint', 'Lie on your back with your knees bent and your feet flat. ' +
+      'Prop the phone at your feet so it can see your knees.'),
+  );
+  const list = h('ul', 'rules-list');
+  for (const line of [
+    'Get both knees inside the circles.',
+    'When they light up, the countdown starts.',
+    'Lift your hips to pop the bubble. Lower them all the way back down.',
+    'Nothing is recorded. The camera never leaves this phone.',
+  ]) list.appendChild(h('li', null, line));
+  rules.appendChild(list);
+
+  const go = h('button', 'btn btn-accent', 'Continue');
+  rules.appendChild(go);
+  s.appendChild(rules);
+
+  /* ---- the camera stage, hidden until Continue */
+  const stage = h('div', 'framing-stage');
+  stage.hidden = true;
+  const video = h('video', 'framing-video');
+  video.setAttribute('playsinline', '');
+  video.muted = true;
+  const overlay = h('canvas', 'framing-overlay');
+  const status = h('p', 'framing-status', 'Starting the camera…');
+  stage.append(video, overlay, status);
+  s.appendChild(stage);
+
+  let cam = null;
+  let raf = 0;
+  const zone = zoneFor('bridge');
+  let fit = null;
+  let heldFor = 0;
+  let last = 0;
+  let locked = false;
+
+  const ctx = overlay.getContext('2d');
+
+  function paint(now) {
+    raf = requestAnimationFrame(paint);
+    const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+    last = now;
+
+    const rect = overlay.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (overlay.width !== Math.round(rect.width * dpr)) {
+      overlay.width = Math.round(rect.width * dpr);
+      overlay.height = Math.round(rect.height * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    const ready = isReady(fit);
+    // Held, not merely touched. A circle that fires the moment a knee clips its
+    // edge fires while you are still shuffling, and the countdown starts before
+    // you are actually settled.
+    heldFor = ready ? heldFor + dt : 0;
+    if (heldFor > 0.7 && !locked) {
+      locked = true;
+      status.textContent = 'Got you.';
+      setTimeout(() => ctl.ready(profileId), 450);
+    }
+
+    for (const t of zone.targets) {
+      // The preview is mirrored, so the zone has to be drawn mirrored too or
+      // she moves her left knee and the wrong circle responds.
+      const cx = (1 - t.cx) * rect.width;
+      const cy = t.cy * rect.height;
+      const r = t.r * Math.min(rect.width, rect.height);
+      const hit = fit && !fit.misses.includes(t.label);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = hit ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)';
+      ctx.fill();
+      ctx.lineWidth = hit ? 4 : 2;
+      ctx.strokeStyle = hit ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.45)';
+      ctx.stroke();
+    }
+
+    if (!locked) {
+      if (!fit) status.textContent = 'Looking for you…';
+      else if (ready) status.textContent = 'Hold it…';
+      else status.textContent = `Move your ${fit.misses[0]} into the circle`;
+    }
+  }
+
+  go.onclick = () => {
+    rules.hidden = true;
+    stage.hidden = false;
+    raf = requestAnimationFrame(paint);
+    cam = createCamera(video, {
+      facing: 'user',
+      onFrame: (bodies) => {
+        const picked = pickPlayer(bodies, zone);
+        fit = picked?.fit || null;
+      },
+      onError: (code) => {
+        cancelAnimationFrame(raf);
+        stage.hidden = true;
+        rules.hidden = false;
+        rules.replaceChildren(
+          h('h1', 'title', 'No camera'),
+          h('p', 'rules-hint', FAILURES[code] || FAILURES.unknown),
+        );
+        const again = h('button', 'btn btn-accent', 'Back');
+        again.onclick = () => ctl.back();
+        rules.appendChild(again);
+      },
+    });
+    cam.start();
+  };
+
+  s.addEventListener('screen:leave', () => {
+    cancelAnimationFrame(raf);
+    cam?.stop();
+  });
   return s;
 }

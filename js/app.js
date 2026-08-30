@@ -187,10 +187,20 @@ function go(route) {
     return swap(screens.renderHome(S.profileId, {
       openLeft: () => openDrawer('left'),
       openRight: () => openDrawer('right'),
-      go: (mode) => toast(`${mode} isn’t built yet — that’s the next milestone`),
+      go: (mode) => (mode === 'main'
+        ? go('framing')
+        : toast(`${mode} isn’t built yet — that’s a later milestone`)),
       modeNote,
       lastSeen: S.lastSeen,
     }));
+  }
+
+  if (route === 'framing') {
+    applyTheme(S.profileId);
+    return swap(screens.renderFraming(S.profileId, {
+      back: () => go('home'),
+      ready: () => toast('Framing locked — the game itself is next'),
+    }), { plain: true });
   }
 
   if (route === 'settings') {
