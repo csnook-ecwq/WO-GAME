@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a2426">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Drift</title>
+<style>
+:root{
+  --bg:#0a2426; --bg2:#0d3034; --ink:#d3ece7; --muted:#7fa8a2; --faint:rgba(190,240,230,.07);
+  --arrow:#c3f6ea; --glow:rgba(118,240,208,.55);
+  --cw:#9fe6f2; --ccw:#f1d49c; --flip:#cfbcff;
+  --card:rgba(12,44,48,.97); --line:rgba(190,240,230,.14);
+  --cell:56px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font:16px/1.4 ui-rounded,"SF Pro Rounded",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+body{background:radial-gradient(120% 80% at 50% 38%,var(--bg2) 0%,var(--bg) 70%) fixed,var(--bg)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;
+  padding:max(12px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));max-width:520px;margin:0 auto}
+
+/* top: set label + progress row */
+header{width:100%;display:flex;flex-direction:column;align-items:center;gap:10px}
+.setrow{display:flex;align-items:center;justify-content:space-between;width:100%}
+.setrow .nav{width:44px;height:36px;border-radius:18px;color:var(--muted);font-size:22px;line-height:36px}
+.setrow .nav:disabled{opacity:.18}
+.setlabel{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+#progress{display:flex;justify-content:center;gap:5px;width:100%;flex-wrap:nowrap}
+.dot{flex:0 0 auto;width:19px;height:19px;border-radius:50%;border:1.5px solid var(--line);position:relative;transition:border-color .4s,background .4s,box-shadow .4s}
+.dot.open{border-color:rgba(190,240,230,.32)}
+.dot.done{background:rgba(118,240,208,.16);border-color:rgba(160,245,225,.55)}
+.dot.done::after{content:"";position:absolute;left:6px;top:3px;width:4px;height:8px;border:solid var(--arrow);border-width:0 1.6px 1.6px 0;transform:rotate(45deg)}
+.dot.here{box-shadow:0 0 0 3px rgba(118,240,208,.18),0 0 10px var(--glow);border-color:var(--arrow)}
+.dot.night{border-style:dashed}
+.dot:disabled{cursor:default}
+
+main{flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:0}
+.title{font-size:15px;letter-spacing:.06em;color:var(--muted);text-align:center;min-height:21px}
+.title b{color:var(--ink);font-weight:500}
+.hint{font-size:14px;color:var(--muted);text-align:center;max-width:320px;min-height:40px;transition:opacity .5s}
+
+#board{position:relative;border-radius:18px;
+  background-color:rgba(4,22,24,.35);
+  box-shadow:inset 0 0 0 1px var(--line),0 20px 60px rgba(0,0,0,.25);
+  background-image:radial-gradient(circle at center,rgba(190,240,230,.13) 0 2px,transparent 2.6px);
+  background-size:var(--cell) var(--cell);background-position:var(--pad) var(--pad)}
+#board.won{box-shadow:inset 0 0 0 1px rgba(160,245,225,.35),0 0 60px rgba(118,240,208,.18);transition:box-shadow 1.2s}
+.piece{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;
+  transition:transform .46s cubic-bezier(.45,0,.85,.5),opacity .46s ease-in}
+.piece.gone{pointer-events:none;opacity:0}
+.rot{width:84%;height:84%;transition:transform .32s cubic-bezier(.3,.7,.3,1) .06s}
+.rot svg{width:100%;height:100%;overflow:visible;display:block}
+.piece .glyph{stroke:var(--arrow);filter:drop-shadow(0 0 5px var(--glow));transition:filter .3s}
+.piece.k1 .glyph{stroke:var(--cw);filter:drop-shadow(0 0 5px rgba(140,225,245,.5))}
+.piece.k2 .glyph{stroke:var(--ccw);filter:drop-shadow(0 0 5px rgba(240,205,140,.45))}
+.piece.k3 .glyph{stroke:var(--flip);filter:drop-shadow(0 0 5px rgba(205,185,255,.5))}
+.piece:active .glyph{filter:drop-shadow(0 0 9px var(--glow))}
+.piece.nudge .rot{animation:nudge .2s ease-out}
+@keyframes nudge{40%{transform:var(--r) translateY(-5%)}100%{transform:var(--r)}}
+.piece.flying .glyph{filter:drop-shadow(0 0 12px var(--glow))}
+
+footer{width:100%;display:flex;gap:12px;justify-content:center;padding-top:10px}
+.btn{min-width:150px;height:56px;border-radius:28px;padding:0 26px;font-size:17px;letter-spacing:.04em;
+  background:rgba(118,240,208,.08);box-shadow:inset 0 0 0 1px rgba(160,245,225,.25)}
+.btn:active{background:rgba(118,240,208,.16)}
+.btn.primary{background:rgba(118,240,208,.18);box-shadow:inset 0 0 0 1px rgba(160,245,225,.5),0 0 24px rgba(118,240,208,.15)}
+.icon{width:56px;min-width:56px;padding:0;font-size:20px;color:var(--muted)}
+
+#veil{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:16px 16px max(24px,env(safe-area-inset-bottom));
+  background:rgba(4,20,22,.45);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .5s}
+#veil.show{opacity:1;pointer-events:auto}
+.card{width:100%;max-width:420px;background:var(--card);border-radius:26px;padding:26px 22px 20px;text-align:center;
+  box-shadow:inset 0 0 0 1px var(--line),0 30px 80px rgba(0,0,0,.4);transform:translateY(20px);transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+#veil.show .card{transform:none}
+.card h2{margin:0 0 6px;font-weight:500;font-size:22px;letter-spacing:.03em}
+.card p{margin:0 0 20px;color:var(--muted);font-size:15px}
+.card .row{display:flex;gap:10px;justify-content:center}
+.card .legend{text-align:left;margin:0 0 18px;display:grid;gap:12px}
+.legend div{display:flex;gap:12px;align-items:center;color:var(--muted);font-size:14px}
+.legend svg{width:34px;height:34px;flex:0 0 34px;overflow:visible}
+.busy{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;letter-spacing:.1em}
+@media (prefers-reduced-motion:reduce){.piece,.rot{transition-duration:.01s}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="setrow">
+      <button class="nav" id="prevSet" aria-label="Previous set">‹</button>
+      <span class="setlabel" id="setLabel">Set 1</span>
+      <button class="nav" id="nextSet" aria-label="Next set">›</button>
+    </div>
+    <div id="progress" aria-label="Level progress"></div>
+  </header>
+  <main>
+    <div class="title" id="title"></div>
+    <div id="board" aria-label="Board"></div>
+    <div class="hint" id="hint"></div>
+  </main>
+  <footer>
+    <button class="btn icon" id="help" aria-label="How to play">?</button>
+    <button class="btn" id="replay">Replay</button>
+  </footer>
+</div>
+<div id="veil"><div class="card" id="card"></div></div>
+
+<script>
+/*@ENGINE@*/
+
+/* Hand-picked levels for Set 1. Each is "W,H,cells" where each cell is one base-36 char:
+   0 = empty, otherwise 1 + kind*4 + dir (dir 0 up, 1 right, 2 down, 3 left;
+   kind 0 plain, 1 turns clockwise, 2 turns counter-clockwise, 3 flips). */
+const SET1=/*@LEVELS@*/;
+
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const boardEl=$('#board'),progEl=$('#progress'),titleEl=$('#title'),hintEl=$('#hint'),veil=$('#veil'),card=$('#card');
+const PER_SET=15;
+
+/* ---------- persistence (per-device, optional) ---------- */
+const KEY='drift.v1';
+let S={cur:[1,0],cleared:{},restarts:{},skill:3,sets:{},seen:{}};
+try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(S,JSON.parse(raw));}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+const id=(s,i)=>s+'-'+i;
+const isCleared=(s,i)=>!!S.cleared[id(s,i)];
+function setDone(s){for(let i=0;i<PER_SET;i++)if(!isCleared(s,i))return false;return true;}
+function unlocked(s,i){if(s>1&&!setDone(s-1))return false;return i===0||isCleared(s,i-1)||isCleared(s,i);}
+function maxSet(){let s=1;while(setDone(s))s++;return s;}
+
+/* ---------- level codec ---------- */
+const decode=str=>{const [w,h,c]=str.split(',');return {W:+w,H:+h,cells:[...c].map(ch=>parseInt(ch,36))};};
+const encode=(W,H,cells)=>W+','+H+','+cells.map(v=>v.toString(36)).join('');
+
+/* ---------- endless sets: scaled to the player's skill ---------- */
+const VARIANTS={
+  classic:{kinds:[1,0,0],name:'Classic'},
+  counter:{kinds:[1,1,0],name:'Counter-turn'},
+  flip:{kinds:[1,0,1],name:'Flip'},
+  mixed:{kinds:[1,1,1],name:'Mixed'}
+};
+function planSet(s){
+  if(S.sets[s])return S.sets[s];
+  const skill=S.skill, R=rng(s*2654435761>>>0), levels=[];
+  for(let i=0;i<PER_SET;i++){
+    const night=i>=PER_SET-2;
+    let v='classic';const r=R();
+    if(i>=2){ if(r<0.22)v='counter'; else if(r<0.40)v='flip'; else if(r<0.52&&skill>=4)v='mixed'; }
+    levels.push({D:Math.max(0,Math.min(10,skill-2.5+4*i/12)),v,night,seed:(R()*1e9)|0});
+  }
+  S.sets[s]={skill,levels,cache:{}};save();return S.sets[s];
+}
+function mixKinds(v,sw){ // [plain, cw, ccw, flip]
+  const k=VARIANTS[v].kinds;const tot=k[0]+k[1]+k[2];
+  return [1-sw, sw*k[0]/tot, sw*k[1]/tot, sw*k[2]/tot];
+}
+function generate(spec){
+  const R=rng(spec.seed+1);const D=spec.D;
+  if(spec.night){
+    const W=D<4?5:D<7.5?6:7,H=W+1;
+    const kinds=mixKinds(spec.v,0.7);
+    let best=null,bestScore=-1;const t0=Date.now();
+    while(Date.now()-t0<1400||!best){
+      const c=build(W,H,{density:Date.now()-t0>2500?0.94:1,kinds,inward:2},R);if(!c)continue;
+      const tr=trapRate(c,W,H,R,120);if(tr>bestScore){best=c;bestScore=tr;}
+    }
+    return encode(W,H,best);
+  }
+  const W=D<2?4:D<4?5:D<7.5?6:7, H=Math.min(8,W+(D<3?1:2));
+  const density=Math.min(0.88,0.48+0.045*D), sw=Math.min(0.75,0.28+0.05*D), target=Math.min(0.93,0.25+0.07*D);
+  const kinds=mixKinds(spec.v,sw);
+  let best=null,bestErr=9;const t0=Date.now();
+  for(let n=0;n<400&&(Date.now()-t0<700||!best);n++){
+    const c=build(W,H,{density:n>100?density*0.85:density,kinds,inward:1.5},R);if(!c)continue;
+    const err=Math.abs(trapRate(c,W,H,R,100)-target);if(err<bestErr){best=c;bestErr=err;}
+    if(err<0.03)break;
+  }
+  return encode(W,H,best);
+}
+function levelString(s,i){
+  if(s===1)return SET1[i];
+  const p=planSet(s);
+  if(!p.cache[i]){p.cache[i]=generate(p.levels[i]);save();}
+  return p.cache[i];
+}
+function levelMeta(s,i){
+  if(s===1)return {night:i>=13,v:'classic'};
+  const L=planSet(s).levels[i];return {night:L.night,v:L.v};
+}
+
+/* ---------- glyphs ---------- */
+const ARROW='<path class="glyph" d="M50 80V24M30 43l20-20 20 20" fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>';
+const RING={
+  1:'<path class="glyph" d="M50 7a43 43 0 1 1-30.4 12.6" fill="none" stroke-width="3" stroke-linecap="round" opacity=".55"/><path class="glyph" d="M13 12l6.6 7.6 9-3" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>',
+  2:'<path class="glyph" d="M50 7a43 43 0 1 0 30.4 12.6" fill="none" stroke-width="3" stroke-linecap="round" opacity=".6"/><path class="glyph" d="M87 12l-6.6 7.6-9-3" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>',
+  3:'<circle class="glyph" cx="50" cy="50" r="43" fill="none" stroke-width="3" stroke-dasharray="7 9" opacity=".6"/><path class="glyph" d="M38 92h24" fill="none" stroke-width="5" stroke-linecap="round" opacity=".7"/>'
+};
+const svgFor=k=>'<svg viewBox="0 0 100 100" aria-hidden="true">'+(RING[k]||'')+ARROW+'</svg>';
+const DIRNAME=['up','right','down','left'];
+const KINDNOTE={
+  1:'Ringed arrows turn a quarter clockwise each time a neighbour leaves.',
+  2:'Amber arrows turn a quarter the other way when a neighbour leaves.',
+  3:'Dashed arrows flip right round when a neighbour leaves.'
+};
+
+/* ---------- play ---------- */
+let L=null; // {s,i,W,H,cells,start,pieces[],angle[],tapped}
+function cellSize(W,H){
+  const vw=Math.min(window.innerWidth,520)-32;
+  const vh=window.innerHeight-250;
+  return Math.max(38,Math.floor(Math.min(vw/W,vh/H,78)));
+}
+function load(s,i){
+  S.cur=[s,i];save();closeCard();
+  const str=levelString(s,i);const d=decode(str);
+  L={s,i,W:d.W,H:d.H,start:d.cells.slice(),cells:d.cells.slice(),pieces:[],angle:[],tapped:0,done:false};
+  render();renderProgress();
+  const kinds=new Set(d.cells.filter(Boolean).map(kindOf));
+  const meta=levelMeta(s,i);
+  titleEl.innerHTML=(meta.night?'<b>Nightmare</b> · ':'')+'Level <b>'+(i+1)+'</b>'+(s>1?' · '+VARIANTS[meta.v].name:'');
+  let hint='';
+  if(s===1&&i===0)hint='Tap an arrow. It slides away if nothing stands in its path.';
+  else if(s===1&&i===1)hint='Blocked arrows simply wait. Clear the way first.';
+  else if(s===1&&i===2)hint='Some arrows can only leave after others have gone.';
+  else{
+    for(const k of [1,2,3])if(kinds.has(k)&&!S.seen[k]){hint=KINDNOTE[k];S.seen[k]=1;save();break;}
+    if(!hint&&meta.night)hint=s===1?'Every arrow filled in. One clean way out.':'Every arrow filled in.';
+  }
+  hintEl.textContent=hint;
+}
+function render(){
+  const {W,H}=L;const c=cellSize(W,H);const pad=8;
+  boardEl.style.setProperty('--cell',c+'px');boardEl.style.setProperty('--pad',pad+'px');
+  boardEl.style.width=(W*c+pad*2)+'px';boardEl.style.height=(H*c+pad*2)+'px';
+  boardEl.classList.remove('won');boardEl.innerHTML='';
+  L.cell=c;L.pad=pad;
+  L.cells.forEach((v,idx)=>{
+    if(!v)return;
+    const k=kindOf(v),d=dirOf(v),x=idx%W,y=idx/W|0;
+    const p=document.createElement('button');
+    p.className='piece k'+k;p.style.left=(pad+x*c)+'px';p.style.top=(pad+y*c)+'px';
+    p.innerHTML='<div class="rot">'+svgFor(k)+'</div>';
+    p.setAttribute('aria-label','Arrow pointing '+DIRNAME[d]);
+    L.angle[idx]=d*90;setRot(p,d*90);
+    p.addEventListener('click',()=>tap(idx));
+    boardEl.appendChild(p);L.pieces[idx]=p;
+  });
+}
+function setRot(p,a){const r=p.firstChild;r.style.transform='rotate('+a+'deg)';p.style.setProperty('--r','rotate('+a+'deg)');}
+function tap(idx){
+  if(!L||L.done)return;
+  const {W,H}=L;const v=L.cells[idx];if(!v)return;
+  const p=L.pieces[idx];
+  if(!canFly(L.cells,W,H,idx)){
+    p.classList.remove('nudge');void p.offsetWidth;p.classList.add('nudge');return;
+  }
+  const d=dirOf(v);const res=fly(L.cells,W,H,idx);L.cells=res.cells;L.tapped++;
+  // fly off past the edge
+  const x=idx%W,y=idx/W|0;const steps=[y+1,W-x,H-y,x+1][d]+1;
+  p.classList.add('flying','gone');
+  p.style.transitionDuration=(0.32+steps*0.035)+'s';
+  p.style.transform='translate('+(DX[d]*steps*L.cell)+'px,'+(DY[d]*steps*L.cell)+'px)';
+  L.pieces[idx]=null;
+  if(navigator.vibrate)try{navigator.vibrate(6);}catch(e){}
+  // neighbours turn
+  for(const j of res.turned){const k=kindOf(res.cells[j]);L.angle[j]+=[0,90,-90,180][k];
+    setRot(L.pieces[j],L.angle[j]);L.pieces[j].setAttribute('aria-label','Arrow pointing '+DIRNAME[dirOf(res.cells[j])]);}
+  setTimeout(()=>p.remove(),900);
+  if(!L.cells.some(Boolean)){L.done=true;setTimeout(win,520);}
+  else if(!moves(L.cells,W,H).length){L.done=true;setTimeout(stuck,650);}
+}
+function restartCount(){return S.restarts[id(L.s,L.i)]||0;}
+function replay(){
+  if(!L)return;
+  if(!isCleared(L.s,L.i)&&L.tapped>0){S.restarts[id(L.s,L.i)]=restartCount()+1;save();}
+  load(L.s,L.i);
+}
+function win(){
+  boardEl.classList.add('won');
+  const first=!isCleared(L.s,L.i);
+  if(first){
+    S.cleared[id(L.s,L.i)]=1;
+    const r=restartCount();
+    if(!(L.s===1&&L.i<3)){ // the three warm-ups say nothing about skill
+      const delta=r===0?0.3:r===1?0.15:r<=3?0:r<=6?-0.25:-0.5;
+      S.skill=Math.max(0,Math.min(10,S.skill+delta));
+    }
+    save();
+  }
+  renderProgress();
+  const last=L.i===PER_SET-1;
+  const msg=last?(L.s===1?'All fifteen untangled. A fresh set has been shaped to how you play.':'Set complete. The next one adjusts to you.')
+    :['Quiet board.','Clear.','All paths open.','Untangled.','Still water.'][(L.s*7+L.i)%5];
+  showCard('<h2>'+(last?'Set '+L.s+' cleared':'Cleared')+'</h2><p>'+msg+'</p><div class="row"><button class="btn" data-act="replay">Again</button><button class="btn primary" data-act="next">'+(last?'Next set':'Next')+'</button></div>');
+}
+function stuck(){
+  showCard('<h2>No paths left</h2><p>Every arrow still here is waiting on another. Try a different order.</p><div class="row"><button class="btn primary" data-act="replay">Replay</button></div>');
+}
+function next(){
+  if(L.i<PER_SET-1)load(L.s,L.i+1);
+  else{shaping(()=>load(L.s+1,0));}
+}
+function shaping(fn){
+  // generated levels take a moment on a phone; let a frame paint first
+  boardEl.innerHTML='<div class="busy">shaping…</div>';closeCard();
+  setTimeout(fn,40);
+}
+function showCard(html){card.innerHTML=html;veil.classList.add('show');}
+function closeCard(){veil.classList.remove('show');}
+card.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(!a)return;const act=a.dataset.act;
+  if(act==='replay')replay();else if(act==='next')next();else if(act==='close')closeCard();});
+veil.addEventListener('click',e=>{if(e.target===veil&&L&&!L.done)closeCard();});
+
+/* ---------- progress row ---------- */
+function renderProgress(){
+  const s=L.s;progEl.innerHTML='';
+  for(let i=0;i<PER_SET;i++){
+    const b=document.createElement('button');
+    const meta=levelMeta(s,i);
+    b.className='dot'+(isCleared(s,i)?' done':'')+(unlocked(s,i)?' open':'')+(i===L.i?' here':'')+(meta.night?' night':'');
+    b.setAttribute('aria-label','Level '+(i+1)+(isCleared(s,i)?', cleared':''));
+    b.disabled=!unlocked(s,i);
+    b.addEventListener('click',()=>{if(unlocked(s,i)){if(L.tapped>0&&!L.done&&!isCleared(L.s,L.i)){S.restarts[id(L.s,L.i)]=restartCount()+1;save();}load(s,i);}});
+    progEl.appendChild(b);
+  }
+  $('#setLabel').textContent='Set '+s;
+  $('#prevSet').disabled=s<=1;
+  $('#nextSet').disabled=s>=maxSet();
+}
+$('#prevSet').addEventListener('click',()=>{if(L.s>1)load(L.s-1,firstOpen(L.s-1));});
+$('#nextSet').addEventListener('click',()=>{if(L.s<maxSet())shaping(()=>load(L.s+1,firstOpen(L.s+1)));});
+function firstOpen(s){for(let i=0;i<PER_SET;i++)if(!isCleared(s,i))return i;return 0;}
+$('#replay').addEventListener('click',replay);
+$('#help').addEventListener('click',()=>{
+  const li=(k,t)=>'<div>'+svgFor(k).replace('<svg','<svg class="piece k'+k+'" style="position:static"')+'<span>'+t+'</span></div>';
+  showCard('<h2>How to play</h2><div class="legend">'+
+    li(0,'Tap an arrow to send it off the board. It only goes if every cell in its path is empty.')+
+    li(1,'Ringed arrows turn a quarter clockwise when a neighbour next to them leaves.')+
+    (S.seen[2]?li(2,'Amber arrows turn a quarter counter-clockwise.'):'')+
+    (S.seen[3]?li(3,'Dashed arrows flip right round.'):'')+
+    '</div><p>Order matters. No timer, no lives: if the board locks up, replay it.</p><div class="row"><button class="btn primary" data-act="close">Back</button></div>');
+});
+let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(L&&!L.done)render();},150);});
+
+// resume
+let [s0,i0]=S.cur;if(!unlocked(s0,i0)){s0=1;i0=0;}
+if(s0>1)shaping(()=>load(s0,i0));else load(s0,i0);
+})();
+</script>
+</body>
+</html>
