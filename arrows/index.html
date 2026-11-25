@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a2426">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -22,10 +22,10 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 body{background:radial-gradient(120% 80% at 50% 38%,var(--bg2) 0%,var(--bg) 70%) fixed,var(--bg)}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
 #app{height:100%;display:flex;flex-direction:column;align-items:center;
-  padding:max(12px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));max-width:520px;margin:0 auto}
+  padding:max(12px,env(safe-area-inset-top)) 0 max(16px,env(safe-area-inset-bottom))}
 
 /* top: set label + progress row */
-header{width:100%;display:flex;flex-direction:column;align-items:center;gap:10px}
+header{width:100%;max-width:520px;padding:0 16px;display:flex;flex-direction:column;align-items:center;gap:10px}
 .setrow{display:flex;align-items:center;justify-content:space-between;width:100%}
 .setrow .nav{width:44px;height:36px;border-radius:18px;color:var(--muted);font-size:22px;line-height:36px}
 .setrow .nav:disabled{opacity:.18}
@@ -39,32 +39,37 @@ header{width:100%;display:flex;flex-direction:column;align-items:center;gap:10px
 .dot.night{border-style:dashed}
 .dot:disabled{cursor:default}
 
-main{flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:0}
+main{flex:1;width:100%;display:flex;flex-direction:column;align-items:stretch;gap:8px;min-height:0;padding-top:8px}
 .title{font-size:15px;letter-spacing:.06em;color:var(--muted);text-align:center;min-height:21px}
 .title b{color:var(--ink);font-weight:500}
-.hint{font-size:14px;color:var(--muted);text-align:center;max-width:320px;min-height:40px;transition:opacity .5s}
+.hint{font-size:14px;color:var(--muted);text-align:center;padding:0 16px;min-height:20px;transition:opacity .5s}
 
-#board{position:relative;border-radius:18px;
+/* the board fills the whole width (and as much height as it can); pinch to zoom, drag to pan */
+#view{position:relative;flex:1;min-height:0;overflow:hidden;touch-action:none;cursor:grab}
+#fit{position:absolute;right:12px;top:10px;width:44px;height:44px;border-radius:22px;z-index:2;
+  background:rgba(10,36,38,.85);box-shadow:inset 0 0 0 1px rgba(160,245,225,.3);color:var(--muted);font-size:18px;
+  opacity:0;pointer-events:none;transition:opacity .3s}
+#fit.show{opacity:1;pointer-events:auto}
+#board{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;
   background-color:rgba(4,22,24,.35);
-  box-shadow:inset 0 0 0 1px var(--line),0 20px 60px rgba(0,0,0,.25);
-  background-image:radial-gradient(circle at center,rgba(190,240,230,.13) 0 2px,transparent 2.6px);
-  background-size:var(--cell) var(--cell);background-position:var(--pad) var(--pad)}
-#board.won{box-shadow:inset 0 0 0 1px rgba(160,245,225,.35),0 0 60px rgba(118,240,208,.18);transition:box-shadow 1.2s}
+  box-shadow:inset 0 0 0 1px var(--line);
+  background-image:radial-gradient(circle at center,rgba(190,240,230,.13) 0 1.5px,transparent 2px);
+  background-size:var(--cell) var(--cell)}
+#board.won{box-shadow:inset 0 0 0 1px rgba(160,245,225,.35),inset 0 0 60px rgba(118,240,208,.18);transition:box-shadow 1.2s}
 .piece{position:absolute;width:var(--cell);height:var(--cell);display:flex;align-items:center;justify-content:center;
+  pointer-events:none;color:var(--arrow);
   transition:transform .46s cubic-bezier(.45,0,.85,.5),opacity .46s ease-in}
-.piece.gone{pointer-events:none;opacity:0}
-.rot{width:84%;height:84%;transition:transform .32s cubic-bezier(.3,.7,.3,1) .06s}
+.piece.gone{opacity:0}
+.piece.k1{color:var(--cw)} .piece.k2{color:var(--ccw)} .piece.k3{color:var(--flip)}
+.rot{width:86%;height:86%;transition:transform .32s cubic-bezier(.3,.7,.3,1) .06s}
 .rot svg{width:100%;height:100%;overflow:visible;display:block}
-.piece .glyph{stroke:var(--arrow);filter:drop-shadow(0 0 5px var(--glow));transition:filter .3s}
-.piece.k1 .glyph{stroke:var(--cw);filter:drop-shadow(0 0 5px rgba(140,225,245,.5))}
-.piece.k2 .glyph{stroke:var(--ccw);filter:drop-shadow(0 0 5px rgba(240,205,140,.45))}
-.piece.k3 .glyph{stroke:var(--flip);filter:drop-shadow(0 0 5px rgba(205,185,255,.5))}
-.piece:active .glyph{filter:drop-shadow(0 0 9px var(--glow))}
+/* one soft glow over the whole arrow layer: a filter per arrow makes zooming stutter on phones */
+.pieces{position:absolute;inset:0;filter:drop-shadow(0 0 calc(var(--cell)*.1) rgba(118,240,208,.5))}
+.glyph{stroke:currentColor}
 .piece.nudge .rot{animation:nudge .2s ease-out}
 @keyframes nudge{40%{transform:var(--r) translateY(-5%)}100%{transform:var(--r)}}
-.piece.flying .glyph{filter:drop-shadow(0 0 12px var(--glow))}
 
-footer{width:100%;display:flex;gap:12px;justify-content:center;padding-top:10px}
+footer{width:100%;max-width:520px;display:flex;gap:12px;justify-content:center;padding:10px 16px 0}
 .btn{min-width:150px;height:56px;border-radius:28px;padding:0 26px;font-size:17px;letter-spacing:.04em;
   background:rgba(118,240,208,.08);box-shadow:inset 0 0 0 1px rgba(160,245,225,.25)}
 .btn:active{background:rgba(118,240,208,.16)}
@@ -99,7 +104,7 @@ footer{width:100%;display:flex;gap:12px;justify-content:center;padding-top:10px}
   </header>
   <main>
     <div class="title" id="title"></div>
-    <div id="board" aria-label="Board"></div>
+    <div id="view"><div id="board" aria-label="Board"></div><button id="fit" aria-label="Zoom out to the whole board">⤢</button></div>
     <div class="hint" id="hint"></div>
   </main>
   <footer>
@@ -135,6 +140,13 @@ function countSolutions(c,W,H,cap=1e6,budget=2e6){const memo=new Map();let nodes
   try{return rec(c,c.filter(Boolean).length);}catch(e){return -1;}}
 // random playout success rate: tap a random free arrow each step
 function trapRate(c,W,H,R,n=200){let win=0;for(let t=0;t<n;t++){let b=c;for(;;){const m=moves(b,W,H);if(!m.length)break;b=fly(b,W,H,m[R()*m.length|0]).cells;}if(!b.some(Boolean))win++;}return 1-win/n;}
+function clearLine(c,W,H,i){for(let d=0;d<4;d++){let x=i%W+DX[d],y=(i/W|0)+DY[d],ok=true;
+  while(x>=0&&y>=0&&x<W&&y<H){if(c[y*W+x]){ok=false;break;}x+=DX[d];y+=DY[d];}if(ok)return true;}return false;}
+// would filling cell i leave some empty cell in its row or column with no clear line out?
+function sealsNothing(c,W,H,i){c[i]=1;const x0=i%W,y0=i/W|0;let ok=true;
+  for(let x=0;x<W&&ok;x++){const j=y0*W+x;if(!c[j]&&!clearLine(c,W,H,j))ok=false;}
+  for(let y=0;y<H&&ok;y++){const j=y*W+x0;if(!c[j]&&!clearLine(c,W,H,j))ok=false;}
+  c[i]=0;return ok;}
 // reverse construction: guarantees solvable
 function build(W,H,opt,R){
   const N=Math.round(W*H*opt.density);const c=new Array(W*H).fill(0);const order=[];
@@ -145,39 +157,48 @@ function build(W,H,opt,R){
       while(x>=0&&y>=0&&x<W&&y<H){if(c[y*W+x]){ok=false;break;}x+=DX[d];y+=DY[d];}
       if(ok)cand.push([i,d,Math.pow(1+depth(i),opt.inward||2)*(1+ (opt.dirBias?opt.dirBias(i,d):0))]);}}
     if(!cand.length)return null;
-    let tot=cand.reduce((a,b)=>a+b[2],0),r=R()*tot,pick=cand[0];for(const cd of cand){r-=cd[2];if(r<=0){pick=cd;break;}}
+    // pick a weighted candidate that doesn't seal any other empty cell off from every edge
+    let pick=null;
+    while(cand.length){
+      let tot=cand.reduce((a,b)=>a+b[2],0),r=R()*tot,pi=cand.length-1;for(let q=0;q<cand.length;q++){r-=cand[q][2];if(r<=0){pi=q;break;}}
+      const cd=cand[pi];if(sealsNothing(c,W,H,cd[0])){pick=cd;break;}
+      const bad=cd[0];for(let q=cand.length-1;q>=0;q--)if(cand[q][0]===bad)cand.splice(q,1);
+    }
+    if(!pick)return null;
     const [i,d]=pick;
     // un-turn neighbours (inverse of fly)
     for(const j of neighbors(W,H,i)){const v=c[j];if(!v)continue;const k=kindOf(v);if(TURN[k])c[j]=mk(k,dirOf(v)-TURN[k]+4);}
     let k=0;const r2=R();let acc=0;for(let kk=0;kk<opt.kinds.length;kk++){acc+=opt.kinds[kk];if(r2<acc){k=kk;break;}}
     c[i]=mk(k,d);order.push(i);
   }
+  c.solution=order.reverse();
   return c;
 }
 // ===== /ENGINE =====
 
-/* Hand-picked levels for Set 1. Each is "W,H,cells" where each cell is one base-36 char:
+/* Levels for Set 1. Each is "W,H,cells" where each cell is one base-36 char:
    0 = empty, otherwise 1 + kind*4 + dir (dir 0 up, 1 right, 2 down, 3 left;
    kind 0 plain, 1 turns clockwise, 2 turns counter-clockwise, 3 flips). */
-const SET1=["3,3,202200000",
-  "4,4,0010000000134004",
-  "4,5,30400010034000100201",
-  "4,5,35800040600001000074",
-  "5,5,0450004600003300573070002",
-  "5,6,085001601000667066003042300100",
-  "5,6,700614125200270802007630180080",
-  "6,6,614506000015082078530811703200760020",
-  "6,7,820005080340545261055462450030004620082001",
-  "6,7,538018141282680101060250200080870432851067",
-  "6,7,711651356278307084760822508400454250671042",
-  "6,8,152870160858587667802505570350267853770705074308",
-  "6,8,555078561733704883388005858626875256078846366330",
-  "6,6,785865652858767556766862777312321881",
-  "6,7,255555438768223215374668456677735751875558"];
+const SET1=["15,15,510000000000008020575001001751440778807101610080478117881250040811213161556060385522122200070846867713820070415260000000080474453128576040736436327260000000047760222000000004460260041434250260000158833030080220705003070070076",
+  "15,15,404000000100582008008580150153703007820710860408201281860600707607326000000000004751470440014604481120600004408477470122453504843820200484701335320600046403533850687635403336335360803805333308226000705707306323807073000007022",
+  "15,15,104000450408750151057610205600000004760308260718013610202550086016410481762047073455852000044063388222000000000078747462464046558648252043583331222000883836581382520015885648088500066236737037253306300031000000003000008033482",
+  "15,15,700000010005653401081165001000111137118008120000448145001310054444478506200044834132808382043133383805600843563663757373000437353116522813632523885600004667567260000000088650175336862855750323000017273520000000440400750720075",
+  "15,15,508840100501006654622600750000085641150781002004475181518002658285551226000004447827285002073574181112105040863266122105060725262525600730583167137820440846536882660000008457462520370438132383000000843474330576070600003070366",
+  "15,15,701005038585800628007157516725741506761552200746116734885373778172868600000444565664723850087456434422520061832562560000044768663253800008777467556200007444474556520448203202556000004807502785622008200305257055740700300530003",
+  "16,16,4110500105000005888075111100011708415815160007780761282252018556844858271611871605385131768683226358553111115200465664318118538146317761176155560447046768372000430803672652585630080538633527828006087258820000700803045573263700030700370323363007000070038026",
+  "16,16,1008005000511018054411405016715238138151606677310475872182560000004481585178822284548768688865580476716176625333846578482352286206586181565868384777414136343832444471318657380200482582568526004448873537573802043620000000000078656563700000008370027007623006",
+  "16,16,5575111001578057000000057777752247211511118765264151611766716255074481171518855007475766371762508474474745733282483181773255686008477616332262207555652252552000007644533728522075377456522262266764463633586680000077447762356040043030562000000001000067170567",
+  "16,16,8540011520508105114018118520150600417466486161020000008747886888084154746728852686878876453138820045147474675322088174628538226000874747646827200465844467342600045784772332722047771763253222206761833855625322444815387238862058535733667357623330300700037002",
+  "17,17,5787110080000558558552605600000000845186511541811260464158618755260004774687617585822007462871878125600454451371661222007641678187585556084774467876322720746478841333522607445515782685772064565838826725200863858331565882205353563365633785447436746556647227433366335870062533303763736000675",
+  "17,17,0705460500050587545685711518451153855156116164362606687555155555200076746611174158786876741866225675604666776666286512245417855255562000436447116878382608766466883553556207744474456865580755878885255685600747438335636882006852325525562520857766773363683328355572330337583263636070300707307",
+  "17,17,4551587571181717544147818268778720488478775282552266517617651176888575154815661888171864648746668838226464481537658515244868815688856120638251826855555527614786138683867247645136382236222077746533548567254857225538252256087778253755385366000000000008474710000008777443388243630783386836605",
+  "17,17,6785881115815851274867681187116156466822786812755215766227168768778645645578187188878777437518877551617548645858715378687646666586633825654747446144777688746466658778512646483768281356612486436712885822567666364228785528547447774612885685745533568852568855164686588326568575357337683375785",
+  "17,17,5157581587511885267867861777787682748571687167112784587515836867382584185558828888882458677287555522264517745836473877874656561676766522475444666168562186674667436288852646764446637258885467565558525258824656556863722322283735838386876826746665677457666624747764686565633853558733376787668"];
 
 (function(){
 'use strict';
 const $=s=>document.querySelector(s);
+const view=$('#view'),fitBtn=$('#fit');let Z={s:1,tx:0,ty:0};
 const boardEl=$('#board'),progEl=$('#progress'),titleEl=$('#title'),hintEl=$('#hint'),veil=$('#veil'),card=$('#card');
 const PER_SET=15;
 
@@ -218,32 +239,30 @@ function mixKinds(v,sw){ // [plain, cw, ccw, flip]
   const k=VARIANTS[v].kinds;const tot=k[0]+k[1]+k[2];
   return [1-sw, sw*k[0]/tot, sw*k[1]/tot, sw*k[2]/tot];
 }
+// share of arrows a careless tapper clears before the board locks: lower is harder
+function randomReach(c,W,H,R,n){const total=c.filter(Boolean).length;let sum=0;
+  for(let t=0;t<n;t++){let b=c,left=total;for(;;){const m=moves(b,W,H);if(!m.length)break;b=fly(b,W,H,m[R()*m.length|0]).cells;left--;}sum+=(total-left)/total;}
+  return sum/n;}
 function generate(spec){
+  // every board is 15x15 or bigger and dense from the first level; denser boards get more, smaller cells
   const R=rng(spec.seed+1);const D=spec.D;
-  if(spec.night){
-    const W=D<4?5:D<7.5?6:7,H=W+1;
-    const kinds=mixKinds(spec.v,0.7);
-    let best=null,bestScore=-1;const t0=Date.now();
-    while(Date.now()-t0<1400||!best){
-      const c=build(W,H,{density:Date.now()-t0>2500?0.94:1,kinds,inward:2},R);if(!c)continue;
-      const tr=trapRate(c,W,H,R,120);if(tr>bestScore){best=c;bestScore=tr;}
-    }
-    return encode(W,H,best);
-  }
-  const W=D<2?4:D<4?5:D<7.5?6:7, H=Math.min(8,W+(D<3?1:2));
-  const density=Math.min(0.88,0.48+0.045*D), sw=Math.min(0.75,0.28+0.05*D), target=Math.min(0.93,0.25+0.07*D);
+  const N=spec.night?(D<5?16:D<8?17:18):(D<3?15:D<6?16:D<8.5?17:18);
+  const density=spec.night?1:Math.min(0.94,0.62+0.033*D);
+  const sw=spec.night?0.7:Math.min(0.72,0.45+0.03*D);
+  const target=spec.night?0:Math.max(0.3,0.75-0.045*D);
   const kinds=mixKinds(spec.v,sw);
   let best=null,bestErr=9;const t0=Date.now();
-  for(let n=0;n<400&&(Date.now()-t0<700||!best);n++){
-    const c=build(W,H,{density:n>100?density*0.85:density,kinds,inward:1.5},R);if(!c)continue;
-    const err=Math.abs(trapRate(c,W,H,R,100)-target);if(err<bestErr){best=c;bestErr=err;}
-    if(err<0.03)break;
+  for(let n=0;n<12&&(Date.now()-t0<900||!best);n++){
+    const c=build(N,N,{density,kinds,inward:1.2},R);if(!c)continue;
+    const err=Math.abs(randomReach(c,N,N,R,12)-target);if(err<bestErr){best=c;bestErr=err;}
   }
-  return encode(W,H,best);
+  return encode(N,N,best);
 }
 function levelString(s,i){
   if(s===1)return SET1[i];
   const p=planSet(s);
+  // boards saved by the earlier small-grid version are rebuilt at the new size; progress is untouched
+  if(p.cache[i]&&decode(p.cache[i]).W<15)delete p.cache[i];
   if(!p.cache[i]){p.cache[i]=generate(p.levels[i]);save();}
   return p.cache[i];
 }
@@ -253,7 +272,8 @@ function levelMeta(s,i){
 }
 
 /* ---------- glyphs ---------- */
-const ARROW='<path class="glyph" d="M50 80V24M30 43l20-20 20 20" fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>';
+const ARROW_D='M50 80V24M30 43l20-20 20 20';
+const ARROW='<path class="glyph" d="'+ARROW_D+'" fill="none" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>';
 const RING={
   1:'<path class="glyph" d="M50 7a43 43 0 1 1-30.4 12.6" fill="none" stroke-width="3" stroke-linecap="round" opacity=".55"/><path class="glyph" d="M13 12l6.6 7.6 9-3" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>',
   2:'<path class="glyph" d="M50 7a43 43 0 1 0 30.4 12.6" fill="none" stroke-width="3" stroke-linecap="round" opacity=".6"/><path class="glyph" d="M87 12l-6.6 7.6-9-3" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>',
@@ -261,6 +281,7 @@ const RING={
 };
 const svgFor=k=>'<svg viewBox="0 0 100 100" aria-hidden="true">'+(RING[k]||'')+ARROW+'</svg>';
 const DIRNAME=['up','right','down','left'];
+const ZOOMNOTE='Pinch to zoom in, drag to move around. Tap an arrow to send it off.';
 const KINDNOTE={
   1:'Ringed arrows turn a quarter clockwise each time a neighbour leaves.',
   2:'Amber arrows turn a quarter the other way when a neighbour leaves.',
@@ -269,11 +290,6 @@ const KINDNOTE={
 
 /* ---------- play ---------- */
 let L=null; // {s,i,W,H,cells,start,pieces[],angle[],tapped}
-function cellSize(W,H){
-  const vw=Math.min(window.innerWidth,520)-32;
-  const vh=window.innerHeight-250;
-  return Math.max(38,Math.floor(Math.min(vw/W,vh/H,78)));
-}
 function load(s,i){
   S.cur=[s,i];save();closeCard();
   const str=levelString(s,i);const d=decode(str);
@@ -283,21 +299,23 @@ function load(s,i){
   const meta=levelMeta(s,i);
   titleEl.innerHTML=(meta.night?'<b>Nightmare</b> · ':'')+'Level <b>'+(i+1)+'</b>'+(s>1?' · '+VARIANTS[meta.v].name:'');
   let hint='';
-  if(s===1&&i===0)hint='Tap an arrow. It slides away if nothing stands in its path.';
-  else if(s===1&&i===1)hint='Blocked arrows simply wait. Clear the way first.';
-  else if(s===1&&i===2)hint='Some arrows can only leave after others have gone.';
+  if(!S.seen.zoom){hint=ZOOMNOTE;S.seen.zoom=1;save();}
   else{
     for(const k of [1,2,3])if(kinds.has(k)&&!S.seen[k]){hint=KINDNOTE[k];S.seen[k]=1;save();break;}
-    if(!hint&&meta.night)hint=s===1?'Every arrow filled in. One clean way out.':'Every arrow filled in.';
+    if(!hint&&meta.night)hint='Every arrow filled in.';
   }
+  if(!hint&&s===1&&i===0)hint=ZOOMNOTE;
   hintEl.textContent=hint;
 }
 function render(){
-  const {W,H}=L;const c=cellSize(W,H);const pad=8;
-  boardEl.style.setProperty('--cell',c+'px');boardEl.style.setProperty('--pad',pad+'px');
-  boardEl.style.width=(W*c+pad*2)+'px';boardEl.style.height=(H*c+pad*2)+'px';
+  const {W,H}=L;
+  // fit the board to the full width (and height) of the screen: more cells means smaller cells
+  const vw=view.clientWidth,vh=view.clientHeight;const c=Math.min(vw/W,vh/H);const pad=0;
+  boardEl.style.setProperty('--cell',c+'px');
+  boardEl.style.width=(W*c)+'px';boardEl.style.height=(H*c)+'px';
   boardEl.classList.remove('won');boardEl.innerHTML='';
-  L.cell=c;L.pad=pad;
+  L.cell=c;L.pad=pad;Z={s:1,tx:0,ty:0};applyZ();
+  const layer=document.createElement('div');layer.className='pieces';boardEl.appendChild(layer);
   L.cells.forEach((v,idx)=>{
     if(!v)return;
     const k=kindOf(v),d=dirOf(v),x=idx%W,y=idx/W|0;
@@ -306,8 +324,8 @@ function render(){
     p.innerHTML='<div class="rot">'+svgFor(k)+'</div>';
     p.setAttribute('aria-label','Arrow pointing '+DIRNAME[d]);
     L.angle[idx]=d*90;setRot(p,d*90);
-    p.addEventListener('click',()=>tap(idx));
-    boardEl.appendChild(p);L.pieces[idx]=p;
+    p.tabIndex=-1;p.addEventListener('click',()=>tap(idx)); // keyboard / assistive tech; touches go through the view
+    layer.appendChild(p);L.pieces[idx]=p;
   });
 }
 function setRot(p,a){const r=p.firstChild;r.style.transform='rotate('+a+'deg)';p.style.setProperty('--r','rotate('+a+'deg)');}
@@ -345,10 +363,8 @@ function win(){
   if(first){
     S.cleared[id(L.s,L.i)]=1;
     const r=restartCount();
-    if(!(L.s===1&&L.i<3)){ // the three warm-ups say nothing about skill
-      const delta=r===0?0.3:r===1?0.15:r<=3?0:r<=6?-0.25:-0.5;
-      S.skill=Math.max(0,Math.min(10,S.skill+delta));
-    }
+    const delta=r===0?0.3:r===1?0.15:r<=3?0:r<=6?-0.25:-0.5;
+    S.skill=Math.max(0,Math.min(10,S.skill+delta));
     save();
   }
   renderProgress();
@@ -366,6 +382,7 @@ function next(){
 }
 function shaping(fn){
   // generated levels take a moment on a phone; let a frame paint first
+  boardEl.innerHTML='';boardEl.style.width=view.clientWidth+'px';boardEl.style.height=view.clientHeight+'px';boardEl.style.transform='none';
   boardEl.innerHTML='<div class="busy">shaping…</div>';closeCard();
   setTimeout(fn,40);
 }
@@ -402,9 +419,75 @@ $('#help').addEventListener('click',()=>{
     li(1,'Ringed arrows turn a quarter clockwise when a neighbour next to them leaves.')+
     (S.seen[2]?li(2,'Amber arrows turn a quarter counter-clockwise.'):'')+
     (S.seen[3]?li(3,'Dashed arrows flip right round.'):'')+
-    '</div><p>Order matters. No timer, no lives: if the board locks up, replay it.</p><div class="row"><button class="btn primary" data-act="close">Back</button></div>');
+    '</div><p>Pinch to zoom, drag to move around. Order matters. No timer, no lives: if the board locks up, replay it.</p><div class="row"><button class="btn primary" data-act="close">Back</button></div>');
 });
 let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(L&&!L.done)render();},150);});
+
+/* ---------- pinch to zoom, drag to pan, tap ---------- */
+function clampZ(){
+  const vw=view.clientWidth,vh=view.clientHeight,bw=L.W*L.cell*Z.s,bh=L.H*L.cell*Z.s;
+  Z.tx=bw<=vw?(vw-bw)/2:Math.min(0,Math.max(vw-bw,Z.tx));
+  Z.ty=bh<=vh?(vh-bh)/2:Math.min(0,Math.max(vh-bh,Z.ty));
+}
+function applyZ(){
+  if(!L)return;clampZ();
+  boardEl.style.transform='translate('+Z.tx+'px,'+Z.ty+'px) scale('+Z.s+')';
+  fitBtn.classList.toggle('show',Z.s>1.02);
+}
+const maxZoom=()=>Math.max(2.5,64/L.cell); // zoom until a cell is about a fingertip wide
+function setZoom(ns,px,py){
+  ns=Math.max(1,Math.min(maxZoom(),ns));
+  const bx=(px-Z.tx)/Z.s,by=(py-Z.ty)/Z.s;Z.s=ns;Z.tx=px-bx*ns;Z.ty=py-by*ns;applyZ();
+}
+function local(e){const r=view.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+function tapAt(x,y){
+  if(!L||L.done||veil.classList.contains('show'))return;
+  const fx=(x-Z.tx)/Z.s/L.cell,fy=(y-Z.ty)/Z.s/L.cell;
+  const cx=Math.floor(fx),cy=Math.floor(fy);
+  // the cell under the finger, or failing that the nearest arrow within about half a cell
+  let best=-1,bd=0.75*0.75;
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    const x2=cx+dx,y2=cy+dy;if(x2<0||y2<0||x2>=L.W||y2>=L.H)continue;
+    const j=y2*L.W+x2;if(!L.cells[j]||!L.pieces[j])continue;
+    const d=(dx===0&&dy===0)?-1:(fx-x2-0.5)**2+(fy-y2-0.5)**2;
+    if(d<bd){bd=d;best=j;}
+  }
+  if(best>=0)tap(best);
+}
+const pts=new Map();let G=null;
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+view.addEventListener('pointerdown',e=>{
+  if(e.target===fitBtn)return;
+  try{view.setPointerCapture(e.pointerId);}catch(_){}
+  pts.set(e.pointerId,local(e));
+  if(pts.size===1){const p=local(e);G={mode:'tap',sx:p.x,sy:p.y,tx0:Z.tx,ty0:Z.ty};}
+  else if(pts.size===2){const [a,b]=[...pts.values()];const m=mid(a,b);
+    G={mode:'pinch',d0:Math.max(1,dist(a,b)),s0:Z.s,bx:(m.x-Z.tx)/Z.s,by:(m.y-Z.ty)/Z.s};}
+});
+view.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId)||!G)return;
+  pts.set(e.pointerId,local(e));
+  if(G.mode==='pinch'&&pts.size>=2){
+    const [a,b]=[...pts.values()];const m=mid(a,b);
+    Z.s=Math.max(1,Math.min(maxZoom(),G.s0*dist(a,b)/G.d0));Z.tx=m.x-G.bx*Z.s;Z.ty=m.y-G.by*Z.s;applyZ();
+  }else if(pts.size===1){
+    const p=pts.values().next().value;const dx=p.x-G.sx,dy=p.y-G.sy;
+    if(G.mode==='tap'&&Math.hypot(dx,dy)>10)G.mode='pan';
+    if(G.mode==='pan'){Z.tx=G.tx0+dx;Z.ty=G.ty0+dy;applyZ();view.style.cursor='grabbing';}
+  }
+});
+function endPointer(e){
+  if(!pts.has(e.pointerId))return;
+  const p=local(e);pts.delete(e.pointerId);
+  if(G&&G.mode==='tap'&&pts.size===0&&e.type==='pointerup')tapAt(p.x,p.y);
+  if(pts.size===1){const q=pts.values().next().value;G={mode:'pan',sx:q.x,sy:q.y,tx0:Z.tx,ty0:Z.ty};} // lifted one finger of a pinch
+  if(pts.size===0){G=null;view.style.cursor='';}
+}
+view.addEventListener('pointerup',endPointer);
+view.addEventListener('pointercancel',endPointer);
+view.addEventListener('wheel',e=>{e.preventDefault();const p=local(e);setZoom(Z.s*Math.exp(-e.deltaY*0.0015),p.x,p.y);},{passive:false});
+document.addEventListener('gesturestart',e=>e.preventDefault()); // keep iOS Safari from zooming the page itself
+fitBtn.addEventListener('click',()=>{Z={s:1,tx:0,ty:0};boardEl.style.transition='transform .3s ease';applyZ();setTimeout(()=>boardEl.style.transition='',320);});
 
 // resume
 let [s0,i0]=S.cur;if(!unlocked(s0,i0)){s0=1;i0=0;}

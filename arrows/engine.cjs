@@ -23,6 +23,13 @@ function countSolutions(c,W,H,cap=1e6,budget=2e6){const memo=new Map();let nodes
   try{return rec(c,c.filter(Boolean).length);}catch(e){return -1;}}
 // random playout success rate: tap a random free arrow each step
 function trapRate(c,W,H,R,n=200){let win=0;for(let t=0;t<n;t++){let b=c;for(;;){const m=moves(b,W,H);if(!m.length)break;b=fly(b,W,H,m[R()*m.length|0]).cells;}if(!b.some(Boolean))win++;}return 1-win/n;}
+function clearLine(c,W,H,i){for(let d=0;d<4;d++){let x=i%W+DX[d],y=(i/W|0)+DY[d],ok=true;
+  while(x>=0&&y>=0&&x<W&&y<H){if(c[y*W+x]){ok=false;break;}x+=DX[d];y+=DY[d];}if(ok)return true;}return false;}
+// would filling cell i leave some empty cell in its row or column with no clear line out?
+function sealsNothing(c,W,H,i){c[i]=1;const x0=i%W,y0=i/W|0;let ok=true;
+  for(let x=0;x<W&&ok;x++){const j=y0*W+x;if(!c[j]&&!clearLine(c,W,H,j))ok=false;}
+  for(let y=0;y<H&&ok;y++){const j=y*W+x0;if(!c[j]&&!clearLine(c,W,H,j))ok=false;}
+  c[i]=0;return ok;}
 // reverse construction: guarantees solvable
 function build(W,H,opt,R){
   const N=Math.round(W*H*opt.density);const c=new Array(W*H).fill(0);const order=[];
@@ -33,13 +40,21 @@ function build(W,H,opt,R){
       while(x>=0&&y>=0&&x<W&&y<H){if(c[y*W+x]){ok=false;break;}x+=DX[d];y+=DY[d];}
       if(ok)cand.push([i,d,Math.pow(1+depth(i),opt.inward||2)*(1+ (opt.dirBias?opt.dirBias(i,d):0))]);}}
     if(!cand.length)return null;
-    let tot=cand.reduce((a,b)=>a+b[2],0),r=R()*tot,pick=cand[0];for(const cd of cand){r-=cd[2];if(r<=0){pick=cd;break;}}
+    // pick a weighted candidate that doesn't seal any other empty cell off from every edge
+    let pick=null;
+    while(cand.length){
+      let tot=cand.reduce((a,b)=>a+b[2],0),r=R()*tot,pi=cand.length-1;for(let q=0;q<cand.length;q++){r-=cand[q][2];if(r<=0){pi=q;break;}}
+      const cd=cand[pi];if(sealsNothing(c,W,H,cd[0])){pick=cd;break;}
+      const bad=cd[0];for(let q=cand.length-1;q>=0;q--)if(cand[q][0]===bad)cand.splice(q,1);
+    }
+    if(!pick)return null;
     const [i,d]=pick;
     // un-turn neighbours (inverse of fly)
     for(const j of neighbors(W,H,i)){const v=c[j];if(!v)continue;const k=kindOf(v);if(TURN[k])c[j]=mk(k,dirOf(v)-TURN[k]+4);}
     let k=0;const r2=R();let acc=0;for(let kk=0;kk<opt.kinds.length;kk++){acc+=opt.kinds[kk];if(r2<acc){k=kk;break;}}
     c[i]=mk(k,d);order.push(i);
   }
+  c.solution=order.reverse();
   return c;
 }
 // ===== /ENGINE =====

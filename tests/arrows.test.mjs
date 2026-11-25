@@ -23,6 +23,28 @@ for (const L of levels) {
   });
 }
 
+test('every level is at least 15x15 and starts dense, and they get denser', () => {
+  let prev = 0;
+  for (const L of levels) {
+    const { W, H, cells } = decode(L.code);
+    assert.ok(W >= 15 && H >= 15, `level ${L.level} is ${W}x${H}`);
+    const density = cells.filter(Boolean).length / cells.length;
+    assert.ok(density >= 0.6, `level ${L.level} density ${density}`);
+    assert.ok(density >= prev - 0.02, `level ${L.level} is sparser than the one before`);
+    prev = density;
+  }
+});
+
+test('the builder can fill big grids completely', () => {
+  for (let s = 1; s <= 10; s++) {
+    const c = E.build(17, 17, { density: 1, kinds: [0.3, 0.7], inward: 1.2 }, E.rng(s));
+    assert.ok(c && c.every(Boolean), 'seed ' + s);
+    let b = c.slice();
+    for (const i of c.solution) { assert.ok(E.canFly(b, 17, 17, i)); b = E.fly(b, 17, 17, i).cells; }
+    assert.ok(!b.some(Boolean));
+  }
+});
+
 test('the last two levels fill the whole grid', () => {
   for (const L of levels.slice(13)) assert.ok(decode(L.code).cells.every(Boolean));
 });

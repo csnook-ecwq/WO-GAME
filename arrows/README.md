@@ -8,11 +8,16 @@ Open `index.html` on a phone. It is one self-contained file: no network, no ads,
   can never get past.
 - No timer, no lives. A locked board just offers Replay. Progress is kept in the browser on that device.
 
+- The board fills the screen edge to edge; bigger boards get smaller cells. Pinch to zoom, drag to pan,
+  ⤢ zooms back out. A tap lands on the arrow under your finger, or the nearest one within half a cell.
+
 ## Levels
-Set 1 is the 15 hand-checked boards in `levels.json`. Levels 7–15 have exactly one solution (taps that don't
-affect each other may come in any order). Levels 14–15 fill every cell. After Set 1, each new set
-of 15 is generated on the phone, scaled to a skill rating that moves with how often you replay before clearing.
+Every board is 15x15 or bigger and dense from level 1. Set 1 (`levels.json`) runs 15x15 → 17x17,
+from 62% full to completely full on levels 14–15; random tapping never clears any of them. Each board is
+built backwards from an empty grid, so it always has a solution (stored with the level and checked by
+`npm test`). After Set 1, each new set of 15 is generated on the phone (15x15 → 18x18), scaled to a skill
+rating that moves with how often you replay before clearing.
 
 ## Files
 - `game.src.html`, `engine.cjs`, `levels.json`: the sources. `node build.mjs` combines them into `index.html`.
-- `tools/`: the offline searches that produced Set 1 (`levels.cjs`, `nightmare.cjs`, `traces.cjs`, `assemble.cjs`).
+- `tools/set1.cjs`: builds Set 1 and writes `levels.json`.
