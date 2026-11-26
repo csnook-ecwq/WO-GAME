@@ -99,9 +99,11 @@ const SHAPES = {
   diamond: (u, v) => Math.abs(u) + Math.abs(v) <= 1,
   cross: (u, v) => Math.abs(u) < 0.36 || Math.abs(v) < 0.36,
   wave: (u, v) => Math.abs(v - 0.35 * Math.sin(u * 4)) < 0.55,
+  triangle: (u, v) => v <= 0.85 && v >= -0.95 + 1.6 * Math.abs(u) * 1.05 - 0.05,
+  mushroom: (u, v) => { const cap = v <= 0.05 && u * u / 0.95 + (v + 0.02) * (v + 0.02) / 0.62 <= 1; const stem = Math.abs(u) <= 0.3 + 0.08 * (v - 0.05) && v > -0.05 && v <= 0.92; return cap || stem; },
   maze: () => true,
 };
-const SHAPE_NAMES = { square: 'Square', rectangle: 'Rectangle', circle: 'Circle', heart: 'Heart', star: 'Star', flower: 'Flower', butterfly: 'Butterfly', cat: 'Cat', fish: 'Fish', turtle: 'Turtle', ring: 'Ring', diamond: 'Diamond', cross: 'Cross', wave: 'Wave', maze: 'Maze' };
+const SHAPE_NAMES = { square: 'Square', rectangle: 'Rectangle', circle: 'Circle', heart: 'Heart', star: 'Star', flower: 'Flower', butterfly: 'Butterfly', cat: 'Cat', fish: 'Fish', turtle: 'Turtle', ring: 'Ring', diamond: 'Diamond', triangle: 'Triangle', mushroom: 'Mushroom', cross: 'Cross', wave: 'Wave', maze: 'Maze' };
 function shapeMask(shape, W, H) {
   const f = SHAPES[shape] || SHAPES.square; const m = new Uint8Array(W * H);
   const s = Math.max(W, H) / 2;
@@ -116,25 +118,27 @@ function shapeMask(shape, W, H) {
 /* ---------------- difficulty ---------------- */
 const DIFFS = ['easy', 'medium', 'hard', 'expert', 'extreme', 'nightmare', 'impossible'];
 const DIFF_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert', extreme: 'Extreme', nightmare: 'Nightmare', impossible: 'Impossible' };
-const P2 = { // flat boards: W is the side of a full square board; silhouettes are scaled up to a similar area
-  easy: { W: 8, minLen: 2, maxLen: 6, turn: 0.3, aim: 0.5, tries: 1 },
-  medium: { W: 12, minLen: 3, maxLen: 9, turn: 0.35, aim: 1, tries: 2 },
-  hard: { W: 17, minLen: 3, maxLen: 12, turn: 0.4, aim: 1.5, tries: 2 },
-  expert: { W: 23, minLen: 3, maxLen: 15, turn: 0.42, aim: 2, tries: 2 },
-  extreme: { W: 30, minLen: 3, maxLen: 18, turn: 0.45, aim: 2.5, tries: 2 },
-  nightmare: { W: 40, minLen: 3, maxLen: 20, turn: 0.48, aim: 3, tries: 1 },
-  impossible: { W: 50, minLen: 3, maxLen: 24, turn: 0.5, aim: 3.5, tries: 1 },
+const P2 = { // flat boards: W is the side of a full square board; silhouettes are scaled up to a similar area.
+  // turn = chance per step of turning on purpose; arrows also turn whenever the way ahead is taken,
+  // which is what makes the long runs, hairpins and spirals.
+  easy: { W: 9, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 1 },
+  medium: { W: 13, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
+  hard: { W: 18, minLen: 3, maxLen: 18, turn: 0.18, aim: 1.5, tries: 2 },
+  expert: { W: 24, minLen: 3, maxLen: 24, turn: 0.16, aim: 2, tries: 2 },
+  extreme: { W: 31, minLen: 3, maxLen: 32, turn: 0.15, aim: 2.5, tries: 2 },
+  nightmare: { W: 40, minLen: 3, maxLen: 42, turn: 0.14, aim: 3, tries: 1 },
+  impossible: { W: 52, minLen: 3, maxLen: 54, turn: 0.13, aim: 3.5, tries: 1 },
 };
 const P3 = { // boxes: N is the cube edge in cells
-  easy: { N: 3, minLen: 2, maxLen: 5, turn: 0.3, aim: 0.5, tries: 2 },
-  medium: { N: 4, minLen: 2, maxLen: 7, turn: 0.35, aim: 1, tries: 3 },
-  hard: { N: 5, minLen: 3, maxLen: 9, turn: 0.4, aim: 1.5, tries: 3 },
-  expert: { N: 6, minLen: 3, maxLen: 11, turn: 0.42, aim: 2, tries: 3 },
-  extreme: { N: 8, minLen: 3, maxLen: 13, turn: 0.45, aim: 2.5, tries: 2 },
-  nightmare: { N: 10, minLen: 3, maxLen: 15, turn: 0.48, aim: 3, tries: 2 },
-  impossible: { N: 13, minLen: 3, maxLen: 17, turn: 0.5, aim: 3.5, tries: 1 },
+  easy: { N: 4, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 2 },
+  medium: { N: 6, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
+  hard: { N: 8, minLen: 3, maxLen: 16, turn: 0.18, aim: 1.5, tries: 2 },
+  expert: { N: 10, minLen: 3, maxLen: 22, turn: 0.16, aim: 2, tries: 2 },
+  extreme: { N: 12, minLen: 3, maxLen: 28, turn: 0.15, aim: 2.5, tries: 1 },
+  nightmare: { N: 15, minLen: 3, maxLen: 36, turn: 0.14, aim: 3, tries: 1 },
+  impossible: { N: 18, minLen: 3, maxLen: 44, turn: 0.13, aim: 3.5, tries: 1 },
 };
-const SHAPES_2D = ['square', 'heart', 'circle', 'star', 'flower', 'butterfly', 'cat', 'rectangle', 'fish', 'diamond', 'turtle', 'ring', 'cross', 'wave', 'maze'];
+const SHAPES_2D = ['square', 'heart', 'circle', 'star', 'flower', 'butterfly', 'cat', 'rectangle', 'mushroom', 'fish', 'triangle', 'diamond', 'turtle', 'ring', 'cross', 'wave', 'maze'];
 const SOLIDS = [['cube', 'Cube'], ['slab', 'Slab'], ['tower', 'Tower'], ['bar', 'Bar'], ['brick', 'Brick']];
 
 /* ---------------- generation ---------------- */
@@ -156,9 +160,11 @@ function fill(surf, opt, R) {
     while (path.length < target) {
       const opts = nbrs(cur).filter(s => owner[s.id] === -1);
       if (!opts.length) break;
-      let s = null;
-      if (dir >= 0 && R() > opt.turn) s = opts.find(o => { const st = surf.step(cur, dir); return st && st.id === o.id; }) || null;
-      if (!s) s = opts[(R() * opts.length) | 0];
+      // straight on unless we choose to turn (or can't go straight); a chosen turn really turns
+      const ahead = dir >= 0 ? surf.step(cur, dir) : null;
+      const straight = ahead ? opts.find(o => o.id === ahead.id) : null;
+      const turns = straight ? opts.filter(o => o !== straight) : opts;
+      let s = straight && (R() > opt.turn || !turns.length) ? straight : turns[(R() * turns.length) | 0];
       dir = s.d; path.push(s.id); owner[s.id] = -2; cur = s.id;
     }
     return path;
@@ -287,7 +293,8 @@ function surfaceFor(spec) {
   let surf, opt;
   if (spec.type === '3d') {
     opt = P3[spec.diff]; const N = opt.N;
-    const dims = { cube: [N, N, N], slab: [N + 2, Math.max(2, N - 2), N + 1], tower: [Math.max(2, N - 1), N + 3, Math.max(2, N - 1)], bar: [N + 4, Math.max(2, N - 2), Math.max(2, N - 2)], brick: [N + 2, N, Math.max(2, N - 1)] }[spec.shape] || [N, N, N];
+    const r = f => Math.max(2, Math.round(N * f));
+    const dims = { cube: [N, N, N], slab: [r(1.25), r(0.45), r(1.15)], tower: [r(0.6), r(1.6), r(0.6)], bar: [r(1.7), r(0.55), r(0.55)], brick: [r(1.25), r(0.85), r(0.7)] }[spec.shape] || [N, N, N];
     surf = boxSurface(dims[0], dims[1], dims[2]);
   } else {
     opt = P2[spec.diff]; const shape = SHAPES[spec.shape] ? spec.shape : 'square';

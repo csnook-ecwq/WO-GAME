@@ -86,6 +86,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .tool svg{width:24px;height:24px;color:var(--ink)}
 .tool:active{background:var(--soft)}
 .tool:disabled{opacity:.3}
+.tool.on svg{color:var(--accent)}
+.tool{min-width:52px}
 .toast{position:absolute;left:50%;top:12px;transform:translate(-50%,-10px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;z-index:3}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-weight:600;z-index:4;background:var(--bg)}
@@ -179,6 +181,7 @@ table.recs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
   <div class="tools safe-bot">
     <button class="tool" id="undoBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
     <button class="tool" id="hintBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Hint</button>
+    <button class="tool" id="gridBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>Grid</button>
     <button class="tool" id="viewBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit</button>
     <button class="tool" id="restartBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Restart</button>
   </div>
@@ -288,9 +291,11 @@ const SHAPES = {
   diamond: (u, v) => Math.abs(u) + Math.abs(v) <= 1,
   cross: (u, v) => Math.abs(u) < 0.36 || Math.abs(v) < 0.36,
   wave: (u, v) => Math.abs(v - 0.35 * Math.sin(u * 4)) < 0.55,
+  triangle: (u, v) => v <= 0.85 && v >= -0.95 + 1.6 * Math.abs(u) * 1.05 - 0.05,
+  mushroom: (u, v) => { const cap = v <= 0.05 && u * u / 0.95 + (v + 0.02) * (v + 0.02) / 0.62 <= 1; const stem = Math.abs(u) <= 0.3 + 0.08 * (v - 0.05) && v > -0.05 && v <= 0.92; return cap || stem; },
   maze: () => true,
 };
-const SHAPE_NAMES = { square: 'Square', rectangle: 'Rectangle', circle: 'Circle', heart: 'Heart', star: 'Star', flower: 'Flower', butterfly: 'Butterfly', cat: 'Cat', fish: 'Fish', turtle: 'Turtle', ring: 'Ring', diamond: 'Diamond', cross: 'Cross', wave: 'Wave', maze: 'Maze' };
+const SHAPE_NAMES = { square: 'Square', rectangle: 'Rectangle', circle: 'Circle', heart: 'Heart', star: 'Star', flower: 'Flower', butterfly: 'Butterfly', cat: 'Cat', fish: 'Fish', turtle: 'Turtle', ring: 'Ring', diamond: 'Diamond', triangle: 'Triangle', mushroom: 'Mushroom', cross: 'Cross', wave: 'Wave', maze: 'Maze' };
 function shapeMask(shape, W, H) {
   const f = SHAPES[shape] || SHAPES.square; const m = new Uint8Array(W * H);
   const s = Math.max(W, H) / 2;
@@ -305,25 +310,27 @@ function shapeMask(shape, W, H) {
 /* ---------------- difficulty ---------------- */
 const DIFFS = ['easy', 'medium', 'hard', 'expert', 'extreme', 'nightmare', 'impossible'];
 const DIFF_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert', extreme: 'Extreme', nightmare: 'Nightmare', impossible: 'Impossible' };
-const P2 = { // flat boards: W is the side of a full square board; silhouettes are scaled up to a similar area
-  easy: { W: 8, minLen: 2, maxLen: 6, turn: 0.3, aim: 0.5, tries: 1 },
-  medium: { W: 12, minLen: 3, maxLen: 9, turn: 0.35, aim: 1, tries: 2 },
-  hard: { W: 17, minLen: 3, maxLen: 12, turn: 0.4, aim: 1.5, tries: 2 },
-  expert: { W: 23, minLen: 3, maxLen: 15, turn: 0.42, aim: 2, tries: 2 },
-  extreme: { W: 30, minLen: 3, maxLen: 18, turn: 0.45, aim: 2.5, tries: 2 },
-  nightmare: { W: 40, minLen: 3, maxLen: 20, turn: 0.48, aim: 3, tries: 1 },
-  impossible: { W: 50, minLen: 3, maxLen: 24, turn: 0.5, aim: 3.5, tries: 1 },
+const P2 = { // flat boards: W is the side of a full square board; silhouettes are scaled up to a similar area.
+  // turn = chance per step of turning on purpose; arrows also turn whenever the way ahead is taken,
+  // which is what makes the long runs, hairpins and spirals.
+  easy: { W: 9, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 1 },
+  medium: { W: 13, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
+  hard: { W: 18, minLen: 3, maxLen: 18, turn: 0.18, aim: 1.5, tries: 2 },
+  expert: { W: 24, minLen: 3, maxLen: 24, turn: 0.16, aim: 2, tries: 2 },
+  extreme: { W: 31, minLen: 3, maxLen: 32, turn: 0.15, aim: 2.5, tries: 2 },
+  nightmare: { W: 40, minLen: 3, maxLen: 42, turn: 0.14, aim: 3, tries: 1 },
+  impossible: { W: 52, minLen: 3, maxLen: 54, turn: 0.13, aim: 3.5, tries: 1 },
 };
 const P3 = { // boxes: N is the cube edge in cells
-  easy: { N: 3, minLen: 2, maxLen: 5, turn: 0.3, aim: 0.5, tries: 2 },
-  medium: { N: 4, minLen: 2, maxLen: 7, turn: 0.35, aim: 1, tries: 3 },
-  hard: { N: 5, minLen: 3, maxLen: 9, turn: 0.4, aim: 1.5, tries: 3 },
-  expert: { N: 6, minLen: 3, maxLen: 11, turn: 0.42, aim: 2, tries: 3 },
-  extreme: { N: 8, minLen: 3, maxLen: 13, turn: 0.45, aim: 2.5, tries: 2 },
-  nightmare: { N: 10, minLen: 3, maxLen: 15, turn: 0.48, aim: 3, tries: 2 },
-  impossible: { N: 13, minLen: 3, maxLen: 17, turn: 0.5, aim: 3.5, tries: 1 },
+  easy: { N: 4, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 2 },
+  medium: { N: 6, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
+  hard: { N: 8, minLen: 3, maxLen: 16, turn: 0.18, aim: 1.5, tries: 2 },
+  expert: { N: 10, minLen: 3, maxLen: 22, turn: 0.16, aim: 2, tries: 2 },
+  extreme: { N: 12, minLen: 3, maxLen: 28, turn: 0.15, aim: 2.5, tries: 1 },
+  nightmare: { N: 15, minLen: 3, maxLen: 36, turn: 0.14, aim: 3, tries: 1 },
+  impossible: { N: 18, minLen: 3, maxLen: 44, turn: 0.13, aim: 3.5, tries: 1 },
 };
-const SHAPES_2D = ['square', 'heart', 'circle', 'star', 'flower', 'butterfly', 'cat', 'rectangle', 'fish', 'diamond', 'turtle', 'ring', 'cross', 'wave', 'maze'];
+const SHAPES_2D = ['square', 'heart', 'circle', 'star', 'flower', 'butterfly', 'cat', 'rectangle', 'mushroom', 'fish', 'triangle', 'diamond', 'turtle', 'ring', 'cross', 'wave', 'maze'];
 const SOLIDS = [['cube', 'Cube'], ['slab', 'Slab'], ['tower', 'Tower'], ['bar', 'Bar'], ['brick', 'Brick']];
 
 /* ---------------- generation ---------------- */
@@ -345,9 +352,11 @@ function fill(surf, opt, R) {
     while (path.length < target) {
       const opts = nbrs(cur).filter(s => owner[s.id] === -1);
       if (!opts.length) break;
-      let s = null;
-      if (dir >= 0 && R() > opt.turn) s = opts.find(o => { const st = surf.step(cur, dir); return st && st.id === o.id; }) || null;
-      if (!s) s = opts[(R() * opts.length) | 0];
+      // straight on unless we choose to turn (or can't go straight); a chosen turn really turns
+      const ahead = dir >= 0 ? surf.step(cur, dir) : null;
+      const straight = ahead ? opts.find(o => o.id === ahead.id) : null;
+      const turns = straight ? opts.filter(o => o !== straight) : opts;
+      let s = straight && (R() > opt.turn || !turns.length) ? straight : turns[(R() * turns.length) | 0];
       dir = s.d; path.push(s.id); owner[s.id] = -2; cur = s.id;
     }
     return path;
@@ -476,7 +485,8 @@ function surfaceFor(spec) {
   let surf, opt;
   if (spec.type === '3d') {
     opt = P3[spec.diff]; const N = opt.N;
-    const dims = { cube: [N, N, N], slab: [N + 2, Math.max(2, N - 2), N + 1], tower: [Math.max(2, N - 1), N + 3, Math.max(2, N - 1)], bar: [N + 4, Math.max(2, N - 2), Math.max(2, N - 2)], brick: [N + 2, N, Math.max(2, N - 1)] }[spec.shape] || [N, N, N];
+    const r = f => Math.max(2, Math.round(N * f));
+    const dims = { cube: [N, N, N], slab: [r(1.25), r(0.45), r(1.15)], tower: [r(0.6), r(1.6), r(0.6)], bar: [r(1.7), r(0.55), r(0.55)], brick: [r(1.25), r(0.85), r(0.7)] }[spec.shape] || [N, N, N];
     surf = boxSurface(dims[0], dims[1], dims[2]);
   } else {
     opt = P2[spec.diff]; const shape = SHAPES[spec.shape] ? spec.shape : 'square';
@@ -535,7 +545,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem('unwind.' + k, JSON.stringify(v)); } catch (e) { /* storage full or blocked */ } },
   del(k) { try { localStorage.removeItem('unwind.' + k); } catch (e) {} },
 };
-const DEFAULT_SETTINGS = { theme: 'auto', color: 'ink', sound: true, haptics: true, grid: false, speed: 1, countdown: true };
+const DEFAULT_SETTINGS = { theme: 'auto', color: 'ink', sound: true, haptics: true, grid: true, speed: 1, countdown: true };
 const settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('settings', {}));
 const prefs = Object.assign({ type: '2d', mode: 'relax', diff: 'easy' }, LS.get('prefs', {}));
 const progress = Object.assign({ cleared: {}, best: {}, daily: {}, endlessBest: {} }, LS.get('progress', {}));
@@ -717,7 +727,7 @@ function attempt(i) {
   } else {
     const b = firstBlock(i); G.moves++; G.mistakes++; stats.mistakes++;
     G.anims.set(i, { kind: 'bump', t0: performance.now(), dur: 380 / Math.sqrt(settings.speed), reach: Math.max(0.12, b.k + 0.42) });
-    G.flash.set(b.j, performance.now()); G.flash.set(i, performance.now());
+    G.flash.set(b.j, performance.now()); G.flash.set(i, performance.now()); G.blockLine = { i, k: b.k, t: performance.now() };
     sfx.blocked(); buzz([25, 30, 25]);
     if (G.mode === 'classic') { G.hearts--; if (G.hearts <= 0) { G.failed = true; G.done = true; setTimeout(() => fail('Out of hearts', 'That arrow was blocked. Each blocked tap costs a heart.'), 500); } }
   }
@@ -859,7 +869,7 @@ let lastTick = performance.now();
 function frame(now) {
   drawQueued = false;
   draw(now);
-  if (G && G.P && (G.anims.size || G.flash.size || G.hint !== null || V.spin)) requestDraw();
+  if (G && G.P && (G.anims.size || G.flash.size || G.blockLine || G.hint !== null || V.spin)) requestDraw();
 }
 // the game clock: runs while a puzzle is open, unpaused, unfinished and on screen
 setInterval(() => {
@@ -896,11 +906,11 @@ function headTri(g, s, onlyFace) { // arrowhead triangle at the head, lying in t
   if (onlyFace !== undefined && f !== onlyFace) return null;
   const p0 = a.p, p1 = b.p, d = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], l = Math.hypot(...d) || 1;
   const T = d.map(v => v / l), N = AX[f >= 0 ? G.P.surf.faces[f].n : g.n];
-  const Bv = [N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]], w = 0.27;
+  const Bv = [N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]], w = 0.21;
   const l1 = [p0[0] + Bv[0] * w, p0[1] + Bv[1] * w, p0[2] + Bv[2] * w], l2 = [p0[0] - Bv[0] * w, p0[1] - Bv[1] * w, p0[2] - Bv[2] * w];
   return [project(p1, [0, 0, 0]), project(l1, [0, 0, 0]), project(l2, [0, 0, 0])];
 }
-function lineW() { const c = cellPx(); return Math.max(1.1, Math.min(5, c * 0.105)); }
+function lineW() { const c = cellPx(); return Math.max(1, Math.min(3.6, c * 0.085)); } // thin, crisp lines
 
 function draw(now) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, VW, VH);
@@ -909,9 +919,9 @@ function draw(now) {
   if (is3D()) { center3 = s.dims.map(v => v / 2); if (V.spin) stepSpin(now); }
   // ---- board / solid
   if (!is3D()) {
-    ctx.fillStyle = dark ? 'rgba(255,255,255,.035)' : 'rgba(27,37,64,.045)';
+    ctx.fillStyle = dark ? 'rgba(255,255,255,.025)' : 'rgba(27,37,64,.025)';
     ctx.beginPath(); for (const c of s.cells) if (c.on) ctx.rect(V.ox + c.x * V.k, V.oy + c.y * V.k, V.k + 0.3, V.k + 0.3); ctx.fill();
-    if (settings.grid && V.k > 5) { ctx.fillStyle = dark ? 'rgba(255,255,255,.22)' : 'rgba(27,37,64,.22)'; const r = Math.max(0.8, V.k * 0.05); ctx.beginPath(); for (const c of s.cells) if (c.on && G.occ[c.id] < 0) { const x = V.ox + (c.x + 0.5) * V.k, y = V.oy + (c.y + 0.5) * V.k; ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 6.283); } ctx.fill(); }
+    if (settings.grid && V.k > 4) { ctx.fillStyle = dark ? 'rgba(255,255,255,.26)' : 'rgba(27,37,64,.26)'; const r = Math.max(0.7, Math.min(2.2, V.k * 0.045)); ctx.beginPath(); for (const c of s.cells) if (c.on && G.occ[c.id] < 0) { const x = V.ox + (c.x + 0.5) * V.k, y = V.oy + (c.y + 0.5) * V.k; ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 6.283); } ctx.fill(); }
   } else {
     const [X, Y, Z] = s.dims, sz = Math.hypot(X, Y, Z) * V.fitK * V.zoom;
     const gx = VW / 2 + V.px, gy = VH / 2 + V.py + sz * 0.55, grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, sz * 0.55);
@@ -930,7 +940,7 @@ function draw(now) {
       ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(q[i][0], q[i][1]); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = dark ? 'rgba(255,255,255,.12)' : 'rgba(27,37,64,.14)'; ctx.lineWidth = 1; ctx.stroke();
       if (settings.grid) {
-        ctx.beginPath(); ctx.strokeStyle = dark ? 'rgba(255,255,255,.07)' : 'rgba(27,37,64,.07)';
+        ctx.beginPath(); ctx.strokeStyle = dark ? 'rgba(255,255,255,.04)' : 'rgba(27,37,64,.04)';
         for (let i = 1; i < D[a1]; i++) { const A = corner(i, 0), B = corner(i, D[a2]); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); }
         for (let j = 1; j < D[a2]; j++) { const A = corner(0, j), B = corner(D[a1], j); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); }
         ctx.stroke();
@@ -943,6 +953,7 @@ function draw(now) {
   const special = new Set(); // drawn on their own: moving, flashing, hinted
   for (const [i, a] of G.anims) { if (now - a.t0 >= a.dur) G.anims.delete(i); else special.add(i); }
   for (const [i, t] of G.flash) { if (now - t > 520) G.flash.delete(i); else special.add(i); }
+  if (G.blockLine && now - G.blockLine.t > 900) G.blockLine = null;
   if (G.hint !== null && (G.removed[G.hint] || now - G.hintT > 4000)) G.hint = null;
   if (G.hint !== null) special.add(G.hint);
   G.hit = []; // projected segments for tapping
@@ -962,6 +973,12 @@ function draw(now) {
   };
   const still = []; for (let i = 0; i < P.arrows.length; i++) if (!G.removed[i] && !special.has(i)) still.push(i);
   if (mono) drawStatic(still, arrowColor(0)); else for (const i of still) drawStatic([i], arrowColor(i));
+  // a blocked tap: a thin red line along the way out, up to the arrow in the way
+  if (G.blockLine && !G.removed[G.blockLine.i]) {
+    const b = G.blockLine, g = G.geo[b.i], age = (now - b.t) / 900;
+    ctx.save(); ctx.globalAlpha = Math.max(0, 1 - age * age); ctx.strokeStyle = css('--bad'); ctx.lineWidth = Math.max(1, lw * 0.6); ctx.setLineDash([Math.max(3, lw * 2), Math.max(3, lw * 1.6)]);
+    ctx.beginPath(); traceTrack(g, g.L + 0.35, g.L + b.k + 0.5); ctx.stroke(); ctx.restore();
+  }
   // moving / highlighted
   for (const i of special) {
     const g = G.geo[i], a = G.anims.get(i); let s0 = 0, alpha = 1, color = arrowColor(i), w = lw;
@@ -1080,6 +1097,7 @@ function updateHud() {
   $('#progBar').style.width = ((n - left) / n * 100) + '%';
   $('#undoBtn').disabled = !G.history.length || G.done;
   $('#viewBtn').lastChild.textContent = is3D() ? 'Reset' : 'Fit';
+  $('#gridBtn').classList.toggle('on', settings.grid);
 }
 function setLoading(on, text) { $('#loading').classList.toggle('on', on); if (text) $('#loadingText').textContent = text; }
 let toastT; function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200); }
@@ -1186,6 +1204,7 @@ $('#undoBtn').onclick = undo;
 $('#hintBtn').onclick = hint;
 $('#restartBtn').onclick = () => { if (G && G.P) { if (G.history.length && !G.done) sheet(`<h2>Restart this puzzle?</h2><p>All ${G.P.arrows.length} arrows come back.</p><div class="row"><button class="big ghost" data-act="close">Cancel</button><button class="big" data-act="restart">Restart</button></div>`); else restart(); } };
 $('#viewBtn').onclick = () => { V.spin = null; fitView(); };
+$('#gridBtn').onclick = () => { settings.grid = !settings.grid; saveSettings(); $('#gridBtn').classList.toggle('on', settings.grid); requestDraw(); };
 window.addEventListener('resize', () => { resize(); if (G && G.P) { clampView(); } });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { autosave(); } else { lastTick = performance.now(); } });
 window.addEventListener('keydown', e => {

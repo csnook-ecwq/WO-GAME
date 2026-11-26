@@ -12,7 +12,7 @@ const LS = {
   set(k, v) { try { localStorage.setItem('unwind.' + k, JSON.stringify(v)); } catch (e) { /* storage full or blocked */ } },
   del(k) { try { localStorage.removeItem('unwind.' + k); } catch (e) {} },
 };
-const DEFAULT_SETTINGS = { theme: 'auto', color: 'ink', sound: true, haptics: true, grid: false, speed: 1, countdown: true };
+const DEFAULT_SETTINGS = { theme: 'auto', color: 'ink', sound: true, haptics: true, grid: true, speed: 1, countdown: true };
 const settings = Object.assign({}, DEFAULT_SETTINGS, LS.get('settings', {}));
 const prefs = Object.assign({ type: '2d', mode: 'relax', diff: 'easy' }, LS.get('prefs', {}));
 const progress = Object.assign({ cleared: {}, best: {}, daily: {}, endlessBest: {} }, LS.get('progress', {}));
@@ -194,7 +194,7 @@ function attempt(i) {
   } else {
     const b = firstBlock(i); G.moves++; G.mistakes++; stats.mistakes++;
     G.anims.set(i, { kind: 'bump', t0: performance.now(), dur: 380 / Math.sqrt(settings.speed), reach: Math.max(0.12, b.k + 0.42) });
-    G.flash.set(b.j, performance.now()); G.flash.set(i, performance.now());
+    G.flash.set(b.j, performance.now()); G.flash.set(i, performance.now()); G.blockLine = { i, k: b.k, t: performance.now() };
     sfx.blocked(); buzz([25, 30, 25]);
     if (G.mode === 'classic') { G.hearts--; if (G.hearts <= 0) { G.failed = true; G.done = true; setTimeout(() => fail('Out of hearts', 'That arrow was blocked. Each blocked tap costs a heart.'), 500); } }
   }
@@ -336,7 +336,7 @@ let lastTick = performance.now();
 function frame(now) {
   drawQueued = false;
   draw(now);
-  if (G && G.P && (G.anims.size || G.flash.size || G.hint !== null || V.spin)) requestDraw();
+  if (G && G.P && (G.anims.size || G.flash.size || G.blockLine || G.hint !== null || V.spin)) requestDraw();
 }
 // the game clock: runs while a puzzle is open, unpaused, unfinished and on screen
 setInterval(() => {
@@ -373,11 +373,11 @@ function headTri(g, s, onlyFace) { // arrowhead triangle at the head, lying in t
   if (onlyFace !== undefined && f !== onlyFace) return null;
   const p0 = a.p, p1 = b.p, d = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], l = Math.hypot(...d) || 1;
   const T = d.map(v => v / l), N = AX[f >= 0 ? G.P.surf.faces[f].n : g.n];
-  const Bv = [N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]], w = 0.27;
+  const Bv = [N[1] * T[2] - N[2] * T[1], N[2] * T[0] - N[0] * T[2], N[0] * T[1] - N[1] * T[0]], w = 0.21;
   const l1 = [p0[0] + Bv[0] * w, p0[1] + Bv[1] * w, p0[2] + Bv[2] * w], l2 = [p0[0] - Bv[0] * w, p0[1] - Bv[1] * w, p0[2] - Bv[2] * w];
   return [project(p1, [0, 0, 0]), project(l1, [0, 0, 0]), project(l2, [0, 0, 0])];
 }
-function lineW() { const c = cellPx(); return Math.max(1.1, Math.min(5, c * 0.105)); }
+function lineW() { const c = cellPx(); return Math.max(1, Math.min(3.6, c * 0.085)); } // thin, crisp lines
 
 function draw(now) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, VW, VH);
@@ -386,9 +386,9 @@ function draw(now) {
   if (is3D()) { center3 = s.dims.map(v => v / 2); if (V.spin) stepSpin(now); }
   // ---- board / solid
   if (!is3D()) {
-    ctx.fillStyle = dark ? 'rgba(255,255,255,.035)' : 'rgba(27,37,64,.045)';
+    ctx.fillStyle = dark ? 'rgba(255,255,255,.025)' : 'rgba(27,37,64,.025)';
     ctx.beginPath(); for (const c of s.cells) if (c.on) ctx.rect(V.ox + c.x * V.k, V.oy + c.y * V.k, V.k + 0.3, V.k + 0.3); ctx.fill();
-    if (settings.grid && V.k > 5) { ctx.fillStyle = dark ? 'rgba(255,255,255,.22)' : 'rgba(27,37,64,.22)'; const r = Math.max(0.8, V.k * 0.05); ctx.beginPath(); for (const c of s.cells) if (c.on && G.occ[c.id] < 0) { const x = V.ox + (c.x + 0.5) * V.k, y = V.oy + (c.y + 0.5) * V.k; ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 6.283); } ctx.fill(); }
+    if (settings.grid && V.k > 4) { ctx.fillStyle = dark ? 'rgba(255,255,255,.26)' : 'rgba(27,37,64,.26)'; const r = Math.max(0.7, Math.min(2.2, V.k * 0.045)); ctx.beginPath(); for (const c of s.cells) if (c.on && G.occ[c.id] < 0) { const x = V.ox + (c.x + 0.5) * V.k, y = V.oy + (c.y + 0.5) * V.k; ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, 6.283); } ctx.fill(); }
   } else {
     const [X, Y, Z] = s.dims, sz = Math.hypot(X, Y, Z) * V.fitK * V.zoom;
     const gx = VW / 2 + V.px, gy = VH / 2 + V.py + sz * 0.55, grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, sz * 0.55);
@@ -407,7 +407,7 @@ function draw(now) {
       ctx.beginPath(); ctx.moveTo(q[0][0], q[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(q[i][0], q[i][1]); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = dark ? 'rgba(255,255,255,.12)' : 'rgba(27,37,64,.14)'; ctx.lineWidth = 1; ctx.stroke();
       if (settings.grid) {
-        ctx.beginPath(); ctx.strokeStyle = dark ? 'rgba(255,255,255,.07)' : 'rgba(27,37,64,.07)';
+        ctx.beginPath(); ctx.strokeStyle = dark ? 'rgba(255,255,255,.04)' : 'rgba(27,37,64,.04)';
         for (let i = 1; i < D[a1]; i++) { const A = corner(i, 0), B = corner(i, D[a2]); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); }
         for (let j = 1; j < D[a2]; j++) { const A = corner(0, j), B = corner(D[a1], j); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); }
         ctx.stroke();
@@ -420,6 +420,7 @@ function draw(now) {
   const special = new Set(); // drawn on their own: moving, flashing, hinted
   for (const [i, a] of G.anims) { if (now - a.t0 >= a.dur) G.anims.delete(i); else special.add(i); }
   for (const [i, t] of G.flash) { if (now - t > 520) G.flash.delete(i); else special.add(i); }
+  if (G.blockLine && now - G.blockLine.t > 900) G.blockLine = null;
   if (G.hint !== null && (G.removed[G.hint] || now - G.hintT > 4000)) G.hint = null;
   if (G.hint !== null) special.add(G.hint);
   G.hit = []; // projected segments for tapping
@@ -439,6 +440,12 @@ function draw(now) {
   };
   const still = []; for (let i = 0; i < P.arrows.length; i++) if (!G.removed[i] && !special.has(i)) still.push(i);
   if (mono) drawStatic(still, arrowColor(0)); else for (const i of still) drawStatic([i], arrowColor(i));
+  // a blocked tap: a thin red line along the way out, up to the arrow in the way
+  if (G.blockLine && !G.removed[G.blockLine.i]) {
+    const b = G.blockLine, g = G.geo[b.i], age = (now - b.t) / 900;
+    ctx.save(); ctx.globalAlpha = Math.max(0, 1 - age * age); ctx.strokeStyle = css('--bad'); ctx.lineWidth = Math.max(1, lw * 0.6); ctx.setLineDash([Math.max(3, lw * 2), Math.max(3, lw * 1.6)]);
+    ctx.beginPath(); traceTrack(g, g.L + 0.35, g.L + b.k + 0.5); ctx.stroke(); ctx.restore();
+  }
   // moving / highlighted
   for (const i of special) {
     const g = G.geo[i], a = G.anims.get(i); let s0 = 0, alpha = 1, color = arrowColor(i), w = lw;
@@ -557,6 +564,7 @@ function updateHud() {
   $('#progBar').style.width = ((n - left) / n * 100) + '%';
   $('#undoBtn').disabled = !G.history.length || G.done;
   $('#viewBtn').lastChild.textContent = is3D() ? 'Reset' : 'Fit';
+  $('#gridBtn').classList.toggle('on', settings.grid);
 }
 function setLoading(on, text) { $('#loading').classList.toggle('on', on); if (text) $('#loadingText').textContent = text; }
 let toastT; function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200); }
@@ -663,6 +671,7 @@ $('#undoBtn').onclick = undo;
 $('#hintBtn').onclick = hint;
 $('#restartBtn').onclick = () => { if (G && G.P) { if (G.history.length && !G.done) sheet(`<h2>Restart this puzzle?</h2><p>All ${G.P.arrows.length} arrows come back.</p><div class="row"><button class="big ghost" data-act="close">Cancel</button><button class="big" data-act="restart">Restart</button></div>`); else restart(); } };
 $('#viewBtn').onclick = () => { V.spin = null; fitView(); };
+$('#gridBtn').onclick = () => { settings.grid = !settings.grid; saveSettings(); $('#gridBtn').classList.toggle('on', settings.grid); requestDraw(); };
 window.addEventListener('resize', () => { resize(); if (G && G.P) { clampView(); } });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { autosave(); } else { lastTick = performance.now(); } });
 window.addEventListener('keydown', e => {

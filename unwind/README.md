@@ -5,14 +5,16 @@ no network, accounts, ads or purchases. Progress, settings and statistics are sa
 
 ## Play
 - **Tap an arrow** and it slides out head-first, its body following its own winding path. It only goes
-  if nothing is in the way between its head and the edge; otherwise it bumps, and it and its blocker flash red.
-- **2D**: 15 silhouettes (square, rectangle, circle, heart, star, flower, butterfly, cat, fish, turtle,
-  diamond, ring, cross, wave, maze). Drag to pan, pinch or scroll to zoom.
+  if nothing is in the way between its head and the edge; otherwise it bumps, it and its blocker flash red,
+  and a red dashed line shows its way out up to the arrow in the way.
+- **2D**: 17 silhouettes (square, rectangle, circle, heart, star, flower, butterfly, cat, mushroom, fish,
+  triangle, turtle, diamond, ring, cross, wave, maze), with an optional dotted grid. Drag to pan, pinch or scroll to zoom.
 - **3D**: arrows cover all six faces of a cube or prism (slab, tower, bar, brick) and wrap over edges.
   An arrow leaves at the edge of the face its head is on, so arrows crossing from neighbouring faces can block it.
   Drag to turn (with a little momentum), pinch or scroll to zoom, two fingers to pan.
-- **Difficulties**: Easy → Impossible. Boards grow (2D Impossible: 50×50 cells, ~400 arrows), arrows get
-  longer and twistier, and dependency chains get deeper.
+- **Difficulties**: Easy → Impossible. Boards grow (2D Impossible: 52×52 cells, ~330 arrows up to 50+ cells
+  long; 3D Impossible: 18×18 per face), arrows get longer, and dependency chains get deeper. Arrows run
+  straight and turn when they choose to or hit something, giving long runs, hairpins and spirals.
 - **Modes**: Relax (no pressure), Classic (three hearts, a blocked tap costs one), Challenge (countdown or
   stopwatch, move count, personal bests), Endless (next puzzle starts by itself, harder every three).
 - Daily 2D and 3D puzzles, levels per difficulty, undo, hint, restart, pause, autosave and continue,

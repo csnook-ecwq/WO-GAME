@@ -46,7 +46,7 @@ test('every difficulty and solid generates a solvable, well-formed puzzle (3D)',
 });
 
 test('nightmare and impossible boards hold hundreds of arrows', () => {
-  for (const [diff, min] of [['nightmare', 200], ['impossible', 300]]) {
+  for (const [diff, min] of [['nightmare', 150], ['impossible', 250]]) {
     const P = E.makePuzzle({ type: '2d', diff, shape: 'square', seed: 7 });
     checkPuzzle(P);
     assert.ok(P.arrows.length >= min, `${diff}: ${P.arrows.length} arrows`);
