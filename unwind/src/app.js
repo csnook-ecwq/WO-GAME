@@ -311,8 +311,9 @@ function clampView() {
   if (!is3D()) {
     V.k = Math.max(V.fitK * 0.7, Math.min(V.k, Math.max(V.fitK * 3, 70)));
     const bw = s.W * V.k, bh = s.H * V.k, m = 60;
-    V.ox = bw + m * 2 <= VW ? (VW - bw) / 2 : Math.min(m, Math.max(VW - bw - m, V.ox));
-    V.oy = bh + m * 2 <= VH ? (VH - bh) / 2 : Math.min(m, Math.max(VH - bh - m, V.oy));
+    // a board that fits stays centred; a bigger (zoomed) one can be dragged a little past its edges
+    V.ox = bw <= VW ? (VW - bw) / 2 : Math.min(m, Math.max(VW - bw - m, V.ox));
+    V.oy = bh <= VH ? (VH - bh) / 2 : Math.min(m, Math.max(VH - bh - m, V.oy));
   } else {
     V.zoom = Math.max(0.5, Math.min(4, V.zoom)); const lim = Math.max(VW, VH) * 0.6 * V.zoom;
     V.px = Math.max(-lim, Math.min(lim, V.px)); V.py = Math.max(-lim, Math.min(lim, V.py));
@@ -537,8 +538,8 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 function bringIntoView(i) {
   const g = G.geo[i];
   if (!is3D()) {
-    const p = posAt(g, g.L).p, x = V.ox + p[0] * V.k, y = V.oy + p[1] * V.k, m = 50;
-    if (x < m || y < m || x > VW - m || y > VH - m) { V.ox += VW / 2 - x; V.oy += VH / 2 - y; clampView(); }
+    const p = posAt(g, g.L).p, x = V.ox + p[0] * V.k, y = V.oy + p[1] * V.k, m = 24;
+    if (x < m || y < m || x > VW - m || y > VH - m) { V.ox += VW / 2 - x; V.oy += VH / 2 - y; clampView(); } // only moves when zoomed in
     return;
   }
   // turn the solid so the face with the hinted arrow's head looks at us

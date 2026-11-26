@@ -44,7 +44,11 @@ Surface.prototype.step = function (id, d) {
   return w >= 0 ? { id: w, d: OPP[cell.n] } : null;
 };
 // the cells an arrow's head crosses on its way out: straight on, to the edge of its own face
-Surface.prototype.ray = function (id, d) {
+Surface.prototype.ray = function (id, d) { // cached: ways out never change (callers must not modify the array)
+  const k = id * 6 + d; if (!this.rays) this.rays = new Map();
+  let r = this.rays.get(k); if (!r) { r = this.rayRaw(id, d); this.rays.set(k, r); } return r;
+};
+Surface.prototype.rayRaw = function (id, d) {
   const out = []; const n = this.cells[id].n; let cur = id;
   for (;;) { const s = this.step(cur, d); if (!s || this.cells[s.id].n !== n || s.d !== d) break; out.push(s.id); cur = s.id; }
   return out;
@@ -121,22 +125,22 @@ const DIFF_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expe
 const P2 = { // flat boards: W is the side of a full square board; silhouettes are scaled up to a similar area.
   // turn = chance per step of turning on purpose; arrows also turn whenever the way ahead is taken,
   // which is what makes the long runs, hairpins and spirals.
-  easy: { W: 9, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 1 },
-  medium: { W: 13, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
-  hard: { W: 18, minLen: 3, maxLen: 18, turn: 0.18, aim: 1.5, tries: 2 },
-  expert: { W: 24, minLen: 3, maxLen: 24, turn: 0.16, aim: 2, tries: 2 },
-  extreme: { W: 31, minLen: 3, maxLen: 32, turn: 0.15, aim: 2.5, tries: 2 },
-  nightmare: { W: 40, minLen: 3, maxLen: 42, turn: 0.14, aim: 3, tries: 1 },
-  impossible: { W: 52, minLen: 3, maxLen: 54, turn: 0.13, aim: 3.5, tries: 1 },
+  easy: { W: 12, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 1 },
+  medium: { W: 18, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
+  hard: { W: 25, minLen: 3, maxLen: 18, turn: 0.18, aim: 1.5, tries: 2 },
+  expert: { W: 33, minLen: 3, maxLen: 24, turn: 0.16, aim: 2, tries: 2 },
+  extreme: { W: 42, minLen: 3, maxLen: 32, turn: 0.15, aim: 2.5, tries: 2 },
+  nightmare: { W: 54, minLen: 3, maxLen: 42, turn: 0.14, aim: 3, tries: 1 },
+  impossible: { W: 68, minLen: 3, maxLen: 54, turn: 0.13, aim: 3.5, tries: 1 },
 };
 const P3 = { // boxes: N is the cube edge in cells
-  easy: { N: 4, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 2 },
-  medium: { N: 6, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
-  hard: { N: 8, minLen: 3, maxLen: 16, turn: 0.18, aim: 1.5, tries: 2 },
-  expert: { N: 10, minLen: 3, maxLen: 22, turn: 0.16, aim: 2, tries: 2 },
-  extreme: { N: 12, minLen: 3, maxLen: 28, turn: 0.15, aim: 2.5, tries: 1 },
-  nightmare: { N: 15, minLen: 3, maxLen: 36, turn: 0.14, aim: 3, tries: 1 },
-  impossible: { N: 18, minLen: 3, maxLen: 44, turn: 0.13, aim: 3.5, tries: 1 },
+  easy: { N: 6, minLen: 2, maxLen: 8, turn: 0.22, aim: 0.5, tries: 2 },
+  medium: { N: 8, minLen: 3, maxLen: 12, turn: 0.2, aim: 1, tries: 2 },
+  hard: { N: 11, minLen: 3, maxLen: 16, turn: 0.18, aim: 1.5, tries: 2 },
+  expert: { N: 14, minLen: 3, maxLen: 22, turn: 0.16, aim: 2, tries: 2 },
+  extreme: { N: 17, minLen: 3, maxLen: 28, turn: 0.15, aim: 2.5, tries: 1 },
+  nightmare: { N: 21, minLen: 3, maxLen: 36, turn: 0.14, aim: 3, tries: 1 },
+  impossible: { N: 25, minLen: 3, maxLen: 44, turn: 0.13, aim: 3.5, tries: 1 },
 };
 const SHAPES_2D = ['square', 'heart', 'circle', 'star', 'flower', 'butterfly', 'cat', 'rectangle', 'mushroom', 'fish', 'triangle', 'diamond', 'turtle', 'ring', 'cross', 'wave', 'maze'];
 const SOLIDS = [['cube', 'Cube'], ['slab', 'Slab'], ['tower', 'Tower'], ['bar', 'Bar'], ['brick', 'Brick']];

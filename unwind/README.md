@@ -12,8 +12,8 @@ no network, accounts, ads or purchases. Progress, settings and statistics are sa
 - **3D**: arrows cover all six faces of a cube or prism (slab, tower, bar, brick) and wrap over edges.
   An arrow leaves at the edge of the face its head is on, so arrows crossing from neighbouring faces can block it.
   Drag to turn (with a little momentum), pinch or scroll to zoom, two fingers to pan.
-- **Difficulties**: Easy → Impossible. Boards grow (2D Impossible: 52×52 cells, ~330 arrows up to 50+ cells
-  long; 3D Impossible: 18×18 per face), arrows get longer, and dependency chains get deeper. Arrows run
+- **Difficulties**: Easy → Impossible. Boards grow (2D from 12×12 to 68×68 cells, up to ~630 arrows, some
+  50+ cells long; 3D from 6×6 to 25×25 cells per face, ~380 arrows on Impossible), arrows get longer, and dependency chains get deeper. Arrows run
   straight and turn when they choose to or hit something, giving long runs, hairpins and spirals.
 - **Modes**: Relax (no pressure), Classic (three hearts, a blocked tap costs one), Challenge (countdown or
   stopwatch, move count, personal bests), Endless (next puzzle starts by itself, harder every three).
