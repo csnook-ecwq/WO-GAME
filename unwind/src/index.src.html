@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#f6f5f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arrow Unwind">
+<title>Arrow Unwind</title>
+<style>
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --ink:#1b2540; --muted:#6b7385; --line:rgba(27,37,64,.12); --soft:rgba(27,37,64,.05);
+  --accent:#2f6df6; --bad:#e0453a; --good:#1f9d6a; --shadow:0 10px 40px rgba(20,30,60,.12);
+}
+:root[data-theme="dark"]{
+  --bg:#12151b; --panel:#1b2029; --ink:#e7eaf0; --muted:#8e97a8; --line:rgba(231,234,240,.12); --soft:rgba(231,234,240,.05);
+  --accent:#5b8cff; --bad:#ff5d50; --good:#3cc58e; --shadow:0 10px 40px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
+  font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-user-select:none;user-select:none;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+.screen{position:fixed;inset:0;display:none;flex-direction:column}
+.screen.on{display:flex}
+.safe-top{padding-top:max(10px,env(safe-area-inset-top))}
+.safe-bot{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+
+/* ---------- home ---------- */
+#home{overflow-y:auto;-webkit-overflow-scrolling:touch;align-items:center}
+.home-in{width:100%;max-width:560px;padding:0 18px 28px}
+.brand{display:flex;align-items:center;gap:12px;margin:18px 0 6px}
+.brand svg{width:40px;height:40px}
+.brand h1{font-size:26px;letter-spacing:-.02em;margin:0;font-weight:700}
+.tag{color:var(--muted);margin:0 0 18px}
+.topicons{margin-left:auto;display:flex;gap:4px}
+.ibtn{width:42px;height:42px;border-radius:21px;display:grid;place-items:center;color:var(--ink)}
+.ibtn:active{background:var(--soft)}
+.ibtn svg{width:22px;height:22px}
+.card{background:var(--panel);border-radius:18px;box-shadow:0 1px 0 var(--line),var(--shadow);padding:16px;margin:0 0 14px}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:600}
+.seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;gap:3px;margin-bottom:14px}
+.seg button{flex:1;padding:9px 4px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.chip{padding:8px 12px;border-radius:999px;border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--muted);position:relative}
+.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip small{font-weight:500;opacity:.7;margin-left:4px}
+.modehelp{font-size:13px;color:var(--muted);margin:-6px 0 14px;min-height:18px}
+.big{width:100%;height:52px;border-radius:14px;background:var(--ink);color:var(--bg);font-weight:700;font-size:16px}
+.big:active{opacity:.85}
+.big.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.row{display:flex;gap:10px}
+.levels{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px}
+.lv{aspect-ratio:1;border-radius:12px;background:var(--soft);font-weight:700;font-size:15px;display:grid;place-items:center;position:relative}
+.lv.done{background:var(--ink);color:var(--bg)}
+.lv.done::after{content:"";position:absolute;right:6px;top:6px;width:6px;height:6px;border-radius:3px;background:var(--good)}
+.lv:disabled{opacity:.32;cursor:default}
+.lvhead{display:flex;align-items:baseline;justify-content:space-between}
+.lvhead span{color:var(--muted);font-size:13px}
+.more{margin-top:10px;width:100%;padding:10px;border-radius:12px;color:var(--muted);font-weight:600}
+.daily{display:flex;gap:10px}
+.daily button{flex:1;text-align:left;padding:14px;border-radius:14px;background:var(--soft);position:relative}
+.daily b{display:block;font-size:16px}
+.daily span{color:var(--muted);font-size:13px}
+.daily .ok{position:absolute;right:12px;top:12px;color:var(--good);font-weight:700}
+.continue{display:none}
+.continue.on{display:block}
+
+/* ---------- game ---------- */
+#game{background:var(--bg)}
+.bar{display:flex;align-items:center;gap:6px;padding-left:8px;padding-right:8px;z-index:2}
+.title{flex:1;min-width:0;text-align:center}
+.title b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.title span{font-size:12px;color:var(--muted)}
+.status{display:flex;justify-content:center;align-items:center;gap:14px;font-size:13px;color:var(--muted);min-height:22px;padding:0 12px;font-variant-numeric:tabular-nums}
+.hearts{display:flex;gap:3px}
+.hearts svg{width:18px;height:18px}
+.prog{height:3px;background:var(--soft);margin:6px 16px 0;border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--ink);width:0;transition:width .3s}
+#stage{position:relative;flex:1;min-height:0;touch-action:none}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.tools{display:flex;justify-content:space-around;align-items:center;padding-left:10px;padding-right:10px;padding-top:6px}
+.tool{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:58px;padding:6px 4px;border-radius:12px;font-size:11px;color:var(--muted);font-weight:600}
+.tool svg{width:24px;height:24px;color:var(--ink)}
+.tool:active{background:var(--soft)}
+.tool:disabled{opacity:.3}
+.toast{position:absolute;left:50%;top:12px;transform:translate(-50%,-10px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;z-index:3}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-weight:600;z-index:4;background:var(--bg)}
+.loading.on{display:flex}
+.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- sheets ---------- */
+.veil{position:fixed;inset:0;background:rgba(10,14,24,.38);display:none;align-items:flex-end;justify-content:center;z-index:10;padding:12px}
+.veil.on{display:flex}
+@media (min-width:700px){.veil{align-items:center}}
+.sheet{width:100%;max-width:440px;max-height:88vh;overflow-y:auto;background:var(--panel);border-radius:22px;padding:20px 18px max(18px,env(safe-area-inset-bottom));box-shadow:var(--shadow);animation:up .28s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(30px);opacity:0}}
+.sheet h2{margin:0 0 4px;font-size:21px}
+.sheet p{color:var(--muted);margin:0 0 14px}
+.sheet .big{margin-top:8px}
+.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}
+.stat{background:var(--soft);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.set{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);gap:12px}
+.set:last-of-type{border-bottom:0}
+.set .seg{margin:0;flex:0 0 auto}
+.set .seg button{padding:6px 10px;font-size:13px}
+.sw{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;flex:0 0 50px;transition:.2s}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.2s}
+.sw.on{background:var(--good)}
+.sw.on::after{left:23px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.swatch{width:28px;height:28px;border-radius:14px;box-shadow:inset 0 0 0 2px var(--line)}
+.swatch.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--ink)}
+.small{font-size:12px;color:var(--muted)}
+table.recs{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+table.recs td{padding:6px 2px;border-bottom:1px solid var(--line)}
+table.recs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+
+<!-- ======================= HOME ======================= -->
+<section id="home" class="screen on safe-top safe-bot">
+  <div class="home-in">
+    <div class="brand">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="1" y="1" width="38" height="38" rx="10" fill="var(--ink)"/><path d="M9 29V17h10v8h8V11" fill="none" stroke="var(--bg)" stroke-width="2.6" stroke-linejoin="round"/><path d="M22.5 15 27 10.5 31.5 15" fill="none" stroke="var(--bg)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1>Arrow Unwind</h1>
+      <div class="topicons">
+        <button class="ibtn" id="openStats" aria-label="Statistics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg></button>
+        <button class="ibtn" id="openSettings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      </div>
+    </div>
+    <p class="tag">Tap an arrow to slide it out. Clear them all.</p>
+
+    <div class="card continue" id="continueCard">
+      <div class="label">In progress</div>
+      <div class="row"><button class="big" id="continueBtn">Continue</button></div>
+      <div class="small" id="continueInfo" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Puzzle</div>
+      <div class="seg" id="typeSeg"><button data-v="2d">2D Arrows</button><button data-v="3d">3D Cube</button></div>
+      <div class="label">Mode</div>
+      <div class="seg" id="modeSeg"><button data-v="relax">Relax</button><button data-v="classic">Classic</button><button data-v="challenge">Challenge</button><button data-v="endless">Endless</button></div>
+      <div class="modehelp" id="modeHelp"></div>
+      <div class="label">Difficulty</div>
+      <div class="chips" id="diffChips"></div>
+      <div id="levelArea"></div>
+    </div>
+
+    <div class="card">
+      <div class="label">Daily puzzles</div>
+      <div class="daily" id="dailyBox"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= GAME ======================= -->
+<section id="game" class="screen">
+  <div class="bar safe-top">
+    <button class="ibtn" id="backBtn" aria-label="Back to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="title"><b id="gTitle"></b><span id="gSub"></span></div>
+    <button class="ibtn" id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+  </div>
+  <div class="status" id="status"></div>
+  <div class="prog"><i id="progBar"></i></div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="toast" id="toast"></div>
+    <div class="loading" id="loading"><div class="spin"></div><div id="loadingText">Untangling…</div></div>
+  </div>
+  <div class="tools safe-bot">
+    <button class="tool" id="undoBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
+    <button class="tool" id="hintBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Hint</button>
+    <button class="tool" id="viewBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit</button>
+    <button class="tool" id="restartBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Restart</button>
+  </div>
+</section>
+
+<div class="veil" id="veil"><div class="sheet" id="sheet"></div></div>
+
+<script>
+/*@ENGINE@*/
+</script>
+<script>
+/*@APP@*/
+</script>
+</body>
+</html>
