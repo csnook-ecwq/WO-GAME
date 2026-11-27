@@ -25,8 +25,9 @@ const mq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null
 function isDark() { return settings.theme === 'dark' || (settings.theme === 'auto' && mq && mq.matches); }
 function applyTheme() {
   document.documentElement.dataset.theme = isDark() ? 'dark' : 'light';
-  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = isDark() ? '#12151b' : '#f6f5f1';
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = isDark() ? '#10131a' : '#f4f2ec';
   requestDraw();
+  if (typeof curScreen !== 'undefined' && curScreen !== 'game') { if (curScreen === 'home') renderHome(); else if (curScreen === 'pack') renderPack(); else if (curScreen === 'daily') renderDaily(); }
 }
 if (mq && mq.addEventListener) mq.addEventListener('change', applyTheme);
 const COLORS = { ink: ['#1b2540', '#e7eaf0'], black: ['#111111', '#f4f4f4'], blue: ['#1f56d8', '#7ea6ff'], teal: ['#0f766e', '#4fd1c5'], plum: ['#7b2d8b', '#d59ee6'], rainbow: null };
@@ -60,35 +61,65 @@ const sfx = {
 };
 function buzz(p) { if (settings.haptics && navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} }
 
-/* ======================= puzzle catalogue ======================= */
-const MODE_HELP = {
-  relax: 'Unlimited hints and undo. No timer, no hearts, no pressure.',
-  classic: 'Three hearts. Tapping an arrow that is blocked costs a heart.',
-  challenge: 'Timed, with moves counted and personal bests kept.',
-  endless: 'A new puzzle after every clear, getting harder as you go.',
+/* ======================= puzzle catalogue: packs, levels, dailies ======================= */
+const PACKS = [
+  { id: 'classic', name: 'Classic', blurb: 'Square and tall boards packed edge to edge', type: '2d', shapes: ['square', 'rectangle'], color: '#2f6df6', wide: true },
+  { id: 'shapes', name: 'Shapes', blurb: 'Hearts, stars, animals and more', type: '2d', shapes: ['heart', 'star', 'circle', 'butterfly', 'cat', 'flower', 'mushroom', 'fish', 'triangle', 'diamond', 'turtle', 'ring', 'cross', 'wave'], color: '#ec4f7a' },
+  { id: 'cube', name: 'Cube', blurb: 'Arrows wrap all six faces', type: '3d', shapes: ['cube'], color: '#7c5cff' },
+  { id: 'maze', name: 'Mega Maze', blurb: 'Tall, sprawling labyrinths', type: '2d', shapes: ['maze'], color: '#0fa58f' },
+  { id: 'prism', name: 'Prisms', blurb: 'Towers, slabs, bars and bricks', type: '3d', shapes: ['tower', 'slab', 'bar', 'brick'], color: '#f08c00' },
+];
+const PACK = Object.fromEntries(PACKS.map(p => [p.id, p]));
+function packOf(spec) { // older saves had no pack: work it out from the board
+  if (spec.pack && PACK[spec.pack]) return PACK[spec.pack];
+  if (spec.type === '3d') return spec.shape === 'cube' ? PACK.cube : PACK.prism;
+  return spec.shape === 'maze' ? PACK.maze : (spec.shape === 'square' || spec.shape === 'rectangle') ? PACK.classic : PACK.shapes;
+}
+const MODES = {
+  relax: { name: 'Relax', help: 'Unlimited hints and undo. No timer, no hearts, no pressure.', icon: '<path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19l7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' },
+  classic: { name: 'Classic', help: 'Three hearts. Tapping a blocked arrow costs one. Earn up to three stars.', icon: '<path d="M12 20s-7-4.3-8.9-8.8C1.7 7.9 3.8 4.5 7.1 4.5c2 0 3.4 1.1 4.9 2.9 1.5-1.8 2.9-2.9 4.9-2.9 3.3 0 5.4 3.4 4 6.7C19 15.7 12 20 12 20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>' },
+  challenge: { name: 'Challenge', help: 'Beat the clock. Moves are counted and personal bests kept.', icon: '<circle cx="12" cy="13.5" r="7" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 10v4l2.5 2M10 3h4M18.5 6.5l1.5-1.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' },
+  endless: { name: 'Endless', help: 'One puzzle after another, harder every three. How far can you go?', icon: '<path d="M7.5 15.5c-2 0-3.5-1.6-3.5-3.5S5.5 8.5 7.5 8.5c3.5 0 5.5 7 9 7 2 0 3.5-1.6 3.5-3.5S18.5 8.5 16.5 8.5c-3.5 0-5.5 7-9 7z" fill="none" stroke="currentColor" stroke-width="2.2"/>' },
 };
+const MODE_HELP = Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.help]));
 const DAILY_DIFF = ['expert', 'medium', 'hard', 'expert', 'hard', 'extreme', 'nightmare']; // Sun..Sat
-function levelSpec(type, diff, n) {
-  // 3D: the first levels are plain cubes; prisms of other proportions join in after that
-  const shape = type === '2d' ? E.SHAPES_2D[(n - 1) % E.SHAPES_2D.length] : E.SOLIDS[n <= 3 ? 0 : (n - 3) % E.SOLIDS.length][0];
-  return { type, diff, shape, seed: E.hashStr(`level|${type}|${diff}|${n}`), n };
+const DAILIES = [
+  { kind: 'shape', name: 'Shape of the day', pack: 'shapes', mode: 'classic', note: 'Three hearts' },
+  { kind: 'cube', name: 'Cube of the day', pack: 'cube', mode: 'classic', note: 'Three hearts' },
+  { kind: 'rush', name: 'Daily rush', pack: 'maze', mode: 'challenge', note: 'Against the clock' },
+];
+function levelSpec(packId, diff, n) {
+  const pk = PACK[packId];
+  return { pack: pk.id, type: pk.type, diff, shape: pk.shapes[(n - 1) % pk.shapes.length], seed: E.hashStr(`level|${pk.id}|${diff}|${n}`), n };
 }
-function today() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-function dailySpec(type, date) {
-  const seed = E.hashStr(`daily|${type}|${date}`); const day = new Date(date + 'T12:00:00').getDay();
-  const shapes = type === '2d' ? E.SHAPES_2D.filter(s => s !== 'maze') : E.SOLIDS.map(s => s[0]);
-  return { type, diff: DAILY_DIFF[day], shape: shapes[seed % shapes.length], seed, date };
+const dateKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function today() { return dateKey(new Date()); }
+function dailySpec(kind, date) {
+  const D = DAILIES.find(d => d.kind === kind) || DAILIES[0], pk = PACK[D.pack];
+  const seed = E.hashStr(`daily|${kind}|${date}`), day = new Date(date + 'T12:00:00').getDay();
+  let diff = DAILY_DIFF[day]; if (kind === 'rush' && E.DIFFS.indexOf(diff) > 3) diff = 'expert';
+  return { pack: pk.id, type: pk.type, diff, shape: pk.shapes[seed % pk.shapes.length], seed, date, daily: kind };
 }
-function endlessSpec(type, startDiff, n) {
+function endlessSpec(packId, startDiff, n) {
+  const pk = PACK[packId] || PACK.classic;
   const step = Math.min(E.DIFFS.length - 1, E.DIFFS.indexOf(startDiff) + Math.floor((n - 1) / 3));
-  const seed = E.hashStr(`endless|${type}|${startDiff}|${n}|${progress.endlessSalt || 0}`);
-  const shapes = type === '2d' ? E.SHAPES_2D : E.SOLIDS.map(s => s[0]);
-  return { type, diff: E.DIFFS[step], shape: shapes[seed % shapes.length], seed, n };
+  const seed = E.hashStr(`endless|${pk.id}|${startDiff}|${n}|${progress.endlessSalt || 0}`);
+  return { pack: pk.id, type: pk.type, diff: E.DIFFS[step], shape: pk.shapes[seed % pk.shapes.length], seed, n };
 }
 const shapeName = spec => spec.type === '2d' ? E.SHAPE_NAMES[spec.shape] : (E.SOLIDS.find(s => s[0] === spec.shape) || [0, 'Cube'])[1];
-const levelKey = (type, diff) => type + '-' + diff;
-const clearedSet = (type, diff) => progress.cleared[levelKey(type, diff)] || {};
-function highestCleared(type, diff) { let h = 0; for (const k in clearedSet(type, diff)) h = Math.max(h, +k); return h; }
+const levelKey = (packId, diff) => packId + '-' + diff;
+const clearedSet = (packId, diff) => progress.cleared[levelKey(packId, diff)] || {};
+function highestCleared(packId, diff) { let h = 0; for (const k in clearedSet(packId, diff)) h = Math.max(h, +k); return h; }
+const levelId = (packId, diff, n) => `L:${packId}:${diff}:${n}`;
+const starsFor = id => (progress.stars && progress.stars[id]) || 0;
+function packStars(packId) { let s = 0; for (const k in progress.stars || {}) if (k.startsWith('L:' + packId + ':')) s += progress.stars[k]; return s; }
+function packCleared(packId) { let n = 0; for (const d of E.DIFFS) n += Object.keys(clearedSet(packId, d)).length; return n; }
+function totalStars() { let s = 0; for (const k in progress.stars || {}) s += progress.stars[k]; return s; }
+// older saves: daily keys were per 2D/3D, and preferences had a puzzle type instead of a pack
+for (const k of Object.keys(progress.daily)) { const m = k.match(/^(.*):(2d|3d)$/); if (m) { progress.daily[m[1] + ':' + (m[2] === '2d' ? 'shape' : 'cube')] = 1; delete progress.daily[k]; } }
+progress.stars = progress.stars || {};
+if (!prefs.pack || !PACK[prefs.pack]) prefs.pack = prefs.type === '3d' ? 'cube' : 'classic';
+function streakNow() { const y = new Date(); y.setDate(y.getDate() - 1); return stats.lastDaily === today() || stats.lastDaily === dateKey(y) ? stats.streak : 0; }
 
 /* ======================= puzzle generation (worker when possible) ======================= */
 let worker = null, workerFailed = false, jobId = 0; const jobs = new Map();
@@ -149,9 +180,10 @@ function geometry(P) {
   });
 }
 
-function newGame(spec, kind, mode, restore) {
+function newGame(spec, kind, mode, restore, from) {
   const token = {};
-  G = { spec, kind, mode, P: null, token, loading: true };
+  G = { spec, kind, mode, P: null, token, loading: true, from: from || (curScreen === 'game' ? 'home' : curScreen) };
+  $('#game').style.setProperty('--pack', packOf(spec).color); $('#veil').style.setProperty('--pack', packOf(spec).color);
   showScreen('game'); setLoading(true, spec.diff === 'impossible' || spec.diff === 'nightmare' ? 'Untangling hundreds of arrows…' : 'Untangling…');
   updateHud();
   generate(spec).then(P => {
@@ -219,57 +251,80 @@ function hint() {
 function restart() {
   if (!G || !G.P) return;
   const spec = G.spec, kind = G.kind, mode = G.mode, en = G.endlessN, sd = G.startDiff;
-  newGame(spec, kind, mode, { history: [], endlessN: en, startDiff: sd, hearts: 3 });
+  newGame(spec, kind, mode, { history: [], endlessN: en, startDiff: sd, hearts: 3 }, G.from);
 }
 
 /* ======================= win / fail ======================= */
 function fmt(ms) { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
-function puzzleId() { const s = G.spec; return G.kind === 'level' ? `L:${s.type}:${s.diff}:${s.n}` : G.kind === 'daily' ? `D:${s.type}:${s.date}` : `E:${s.type}:${s.seed}`; }
+function puzzleId() { const s = G.spec, pk = packOf(s).id; return G.kind === 'level' ? levelId(pk, s.diff, s.n) : G.kind === 'daily' ? `D:${s.daily || pk}:${s.date}` : `E:${pk}:${s.seed}`; }
+const STAR = (on, cls) => `<svg class="${cls || ''}" viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.4 1.1 6.2L12 17l-5.6 3 1.1-6.2L2.9 9.4l6.3-.9z" fill="${on ? 'var(--gold)' : 'var(--soft)'}" stroke="${on ? '#d99a00' : 'var(--line)'}" stroke-width="1" stroke-linejoin="round"/></svg>`;
+function earnedStars() { return G.mistakes === 0 && G.hints === 0 ? 3 : G.mistakes <= 2 && G.hints <= 1 ? 2 : 1; }
 function win() {
-  const s = G.spec; sfx.win(); buzz([10, 40, 10, 40, 30]);
-  stats.solved++; stats.byKey[s.type + '-' + s.diff] = (stats.byKey[s.type + '-' + s.diff] || 0) + 1;
+  const s = G.spec, pk = packOf(s); sfx.win(); buzz([10, 40, 10, 40, 30]);
+  stats.solved++; stats.byKey[pk.id + '-' + s.diff] = (stats.byKey[pk.id + '-' + s.diff] || 0) + 1;
   if (!G.mistakes && !G.hints) stats.perfect++;
-  if (G.kind === 'level') { const k = levelKey(s.type, s.diff); progress.cleared[k] = progress.cleared[k] || {}; progress.cleared[k][s.n] = 1; }
+  const stars = earnedStars(), id = puzzleId(), before = starsFor(id);
+  if (G.kind !== 'endless') progress.stars[id] = Math.max(before, stars);
+  if (G.kind === 'level') { const k = levelKey(pk.id, s.diff); progress.cleared[k] = progress.cleared[k] || {}; progress.cleared[k][s.n] = 1; }
   if (G.kind === 'daily') {
-    if (!progress.daily[s.date + ':' + s.type]) {
+    if (stats.lastDaily !== s.date && s.date === today()) {
       const y = new Date(s.date + 'T12:00:00'); y.setDate(y.getDate() - 1);
-      const yk = y.getFullYear() + '-' + String(y.getMonth() + 1).padStart(2, '0') + '-' + String(y.getDate()).padStart(2, '0');
-      if (stats.lastDaily !== s.date) { stats.streak = stats.lastDaily === yk ? stats.streak + 1 : 1; stats.lastDaily = s.date; }
+      stats.streak = stats.lastDaily === dateKey(y) ? stats.streak + 1 : 1; stats.lastDaily = s.date;
     }
-    progress.daily[s.date + ':' + s.type] = 1;
+    progress.daily[s.date + ':' + (s.daily || 'shape')] = 1;
   }
   let record = '';
-  if (G.mode === 'challenge' || G.kind !== 'endless') {
-    const id = puzzleId(), prev = progress.best[id];
-    const cur = { t: Math.round(G.elapsed), m: G.moves };
-    if (!prev || cur.t < prev.t) { record = prev ? 'New best time!' : ''; progress.best[id] = Object.assign({}, prev, { t: cur.t }); }
+  if (G.kind !== 'endless') {
+    const prev = progress.best[id], cur = { t: Math.round(G.elapsed), m: G.moves };
+    if (!prev || prev.t === undefined || cur.t < prev.t) { if (prev && prev.t !== undefined) record = 'New best time!'; progress.best[id] = Object.assign({}, prev, { t: cur.t }); }
     if (!prev || prev.m === undefined || cur.m < prev.m) { progress.best[id] = Object.assign(progress.best[id] || {}, { m: cur.m }); if (prev && prev.m !== undefined) record = record || 'Fewest moves yet!'; }
   }
-  if (G.kind === 'endless') { const k = s.type + '-' + G.startDiff; progress.endlessBest[k] = Math.max(progress.endlessBest[k] || 0, G.endlessN); }
+  if (G.kind === 'endless') { const k = pk.id + '-' + G.startDiff; progress.endlessBest[k] = Math.max(progress.endlessBest[k] || 0, G.endlessN); }
   saveProgress(); saveStats(); LS.del('game');
-  const best = progress.best[puzzleId()];
+  confetti(pk.color);
+  const best = progress.best[id];
   const grid = `<div class="statgrid"><div class="stat"><b>${fmt(G.elapsed)}</b><span>Time${best && best.t !== undefined ? ' · best ' + fmt(best.t) : ''}</span></div>
     <div class="stat"><b>${G.moves}</b><span>Moves${best && best.m !== undefined ? ' · best ' + best.m : ''}</span></div>
-    <div class="stat"><b>${G.P.arrows.length}</b><span>Arrows cleared</span></div>
-    <div class="stat"><b>${G.mistakes} / ${G.hints}</b><span>Blocked taps / hints</span></div></div>`;
+    <div class="stat"><b>${G.P.arrows.length}</b><span>Arrows unwound</span></div>
+    <div class="stat"><b>${G.mistakes} · ${G.hints}</b><span>Blocked taps · hints</span></div></div>`;
+  const starRow = `<div class="stars">${[0, 1, 2].map(k => `<span class="s">${STAR(k < stars)}</span>`).join('')}</div>`;
+  const why = stars === 3 ? 'Flawless: no blocked taps, no hints.' : stars === 2 ? 'Three stars for no blocked taps and no hints.' : 'Fewer blocked taps and hints earn more stars.';
   if (G.kind === 'endless') {
-    sheet(`<h2>Cleared #${G.endlessN}</h2><p>${E.DIFF_NAMES[s.diff]} · ${shapeName(s)}. Next puzzle in a moment…</p>${grid}
-      <div class="row"><button class="big ghost" data-act="menu">Stop</button><button class="big" data-act="next">Next now</button></div>`);
+    sheet(`<h2 class="pop">Cleared #${G.endlessN}</h2>${starRow}<p>${E.DIFF_NAMES[s.diff]} · ${shapeName(s)}. Next puzzle in a moment…</p>${grid}
+      <div class="row"><button class="big ghost" data-act="menu">Stop</button><button class="big packc" data-act="next">Next now</button></div>`);
     G.autoNext = setTimeout(() => { if (veilOpen()) act('next'); }, 2600);
     return;
   }
-  const hasNext = G.kind === 'level';
-  sheet(`<h2>${G.mistakes === 0 && G.hints === 0 ? 'Flawless!' : 'Unwound!'}</h2><p>${E.DIFF_NAMES[s.diff]} · ${shapeName(s)}${record ? ' · <b style="color:var(--good)">' + record + '</b>' : ''}</p>${grid}
-    <div class="row"><button class="big ghost" data-act="menu">Menu</button>${hasNext ? '<button class="big" data-act="next">Next level</button>' : '<button class="big" data-act="replay">Play again</button>'}</div>`);
+  const title = G.kind === 'daily' ? 'Daily done!' : stars === 3 ? 'Perfect!' : stars === 2 ? 'Great!' : 'Unwound!';
+  const next = G.kind === 'level' ? '<button class="big packc" data-act="next">Next level</button>' : '<button class="big packc" data-act="menu">Done</button>';
+  sheet(`<h2 class="pop">${title}</h2>${starRow}<p>${why}${record ? '<br><b style="color:var(--good)">' + record + '</b>' : ''}</p>${grid}
+    <div class="row"><button class="big ghost" data-act="replay">Replay</button>${next}</div><button class="big ghost" data-act="menu" style="margin-top:10px">Menu</button>`);
 }
 function fail(title, text) {
-  LS.del('game');
-  sheet(`<h2>${title}</h2><p>${text}</p><div class="row"><button class="big ghost" data-act="menu">Menu</button><button class="big" data-act="replay">Try again</button></div>`);
+  LS.del('game'); buzz([40, 60, 40]);
+  sheet(`<h2 class="pop">${title}</h2><p>${text}</p><div class="row"><button class="big ghost" data-act="menu">Menu</button><button class="big packc" data-act="replay">Try again</button></div>`);
 }
 function nextPuzzle() {
-  const s = G.spec;
-  if (G.kind === 'level') return newGame(levelSpec(s.type, s.diff, s.n + 1), 'level', G.mode);
-  if (G.kind === 'endless') { const n = G.endlessN + 1; return newGame(endlessSpec(s.type, G.startDiff, n), 'endless', G.mode, { history: [], endlessN: n, startDiff: G.startDiff, hearts: 3 }); }
+  const s = G.spec, pk = packOf(s);
+  if (G.kind === 'level') return newGame(levelSpec(pk.id, s.diff, s.n + 1), 'level', G.mode, null, G.from);
+  if (G.kind === 'endless') { const n = G.endlessN + 1; return newGame(endlessSpec(pk.id, G.startDiff, n), 'endless', G.mode, { history: [], endlessN: n, startDiff: G.startDiff, hearts: 3 }, G.from); }
+}
+// a short burst of little arrows when a puzzle is cleared
+function confetti(color) {
+  const c = $('#confetti'), x = c.getContext('2d'), W = innerWidth, H = innerHeight, d = Math.min(2, devicePixelRatio || 1);
+  c.width = W * d; c.height = H * d; x.setTransform(d, 0, 0, d, 0, 0);
+  const cols = [color, '#f5b301', '#ff6a2b', '#18a06a', '#2f6df6', '#ec4f7a'];
+  const ps = Array.from({ length: 70 }, () => ({ x: W / 2, y: H * 0.42, vx: (Math.random() - 0.5) * 12, vy: -Math.random() * 13 - 4, a: Math.random() * 6.28, va: (Math.random() - 0.5) * 0.3, c: cols[(Math.random() * cols.length) | 0], s: 6 + Math.random() * 6 }));
+  const t0 = performance.now();
+  (function step(now) {
+    const t = (now - t0) / 1000; x.clearRect(0, 0, W, H);
+    for (const p of ps) {
+      p.vy += 0.42; p.x += p.vx; p.y += p.vy; p.a += p.va; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.globalAlpha = Math.max(0, 1 - t / 1.8);
+      x.strokeStyle = p.c; x.fillStyle = p.c; x.lineWidth = 2.4; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-p.s, 0); x.lineTo(p.s * 0.4, 0); x.stroke(); x.beginPath(); x.moveTo(p.s, 0); x.lineTo(p.s * 0.2, -p.s * 0.45); x.lineTo(p.s * 0.2, p.s * 0.45); x.fill(); x.restore();
+    }
+    if (t < 1.8) requestAnimationFrame(step); else x.clearRect(0, 0, W, H);
+  })(t0);
 }
 
 /* ======================= autosave ======================= */
@@ -554,13 +609,13 @@ function bringIntoView(i) {
 /* ======================= HUD ======================= */
 const HEART = c => `<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.9 8 3.1 4 7 4c2.2 0 3.6 1.2 5 3 1.4-1.8 2.8-3 5-3 3.9 0 6.1 4 4.6 7.6C19.5 16.4 12 21 12 21z" fill="${c}"/></svg>`;
 function updateHud() {
-  if (!G) return; const s = G.spec;
-  $('#gTitle').textContent = G.kind === 'level' ? `Level ${s.n}` : G.kind === 'daily' ? `Daily ${s.type === '3d' ? '3D' : '2D'}` : `Endless #${G.endlessN || 1}`;
-  $('#gSub').textContent = `${E.DIFF_NAMES[s.diff]} · ${shapeName(s)} · ${({ relax: 'Relax', classic: 'Classic', challenge: 'Challenge', endless: 'Endless' })[G.mode]}`;
+  if (!G) return; const s = G.spec, pk = packOf(s);
+  $('#gTitle').textContent = G.kind === 'level' ? `${pk.name} · Level ${s.n}` : G.kind === 'daily' ? (DAILIES.find(d => d.kind === s.daily) || DAILIES[0]).name : `Endless #${G.endlessN || 1}`;
+  $('#gSub').textContent = `${E.DIFF_NAMES[s.diff]} · ${shapeName(s)} · ${MODES[G.mode] ? MODES[G.mode].name : ''}`;
   if (!G.P) { $('#status').innerHTML = ''; $('#progBar').style.width = '0'; return; }
-  const n = G.P.arrows.length, left = remaining(), bits = [`<span>${left} / ${n} arrows</span>`];
+  const n = G.P.arrows.length, left = remaining(), bits = [`<span class="chipi">${left} / ${n} arrows</span>`];
   if (G.mode === 'classic') bits.unshift(`<span class="hearts">${[0, 1, 2].map(k => HEART(k < G.hearts ? 'var(--bad)' : 'var(--line)')).join('')}</span>`);
-  if (G.mode === 'challenge') { bits.push(`<span>${G.timeLimit ? '⏱ ' + fmt(G.timeLimit * 1000 - G.elapsed) : '⏱ ' + fmt(G.elapsed)}</span>`, `<span>${G.moves} moves</span>`); }
+  if (G.mode === 'challenge') bits.push(`<span class="chipi">⏱ ${G.timeLimit ? fmt(G.timeLimit * 1000 - G.elapsed) : fmt(G.elapsed)}</span>`, `<span class="chipi">${G.moves} moves</span>`);
   $('#status').innerHTML = bits.join('');
   $('#progBar').style.width = ((n - left) / n * 100) + '%';
   $('#undoBtn').disabled = !G.history.length || G.done;
@@ -580,7 +635,7 @@ sheetEl.addEventListener('click', e => { const b = e.target.closest('[data-act]'
 function act(a, el) {
   if (G && G.autoNext) { clearTimeout(G.autoNext); G.autoNext = null; }
   if (a === 'resume' || a === 'close') return closeSheet();
-  if (a === 'menu') { veil.classList.remove('on'); autosave(); G = null; showScreen('home'); return; }
+  if (a === 'menu') { veil.classList.remove('on'); const to = (G && G.from) || 'home'; autosave(); G = null; showScreen(to); return; }
   if (a === 'replay') { veil.classList.remove('on'); restart(); return; }
   if (a === 'restart') { veil.classList.remove('on'); restart(); return; }
   if (a === 'next') { veil.classList.remove('on'); nextPuzzle(); return; }
@@ -613,60 +668,218 @@ function openSettings() {
     <p class="small" style="margin-top:12px">Everything is saved on this device only. No accounts, no ads.</p>`);
 }
 function openStats() {
-  const rows = []; for (const t of ['2d', '3d']) for (const d of E.DIFFS) { const n = stats.byKey[t + '-' + d] || 0; if (n) rows.push(`<tr><td>${t.toUpperCase()} · ${E.DIFF_NAMES[d]}</td><td>${n}</td></tr>`); }
+  const rows = []; for (const p of PACKS) { let n = 0; for (const d of E.DIFFS) n += stats.byKey[p.id + '-' + d] || 0; if (n) rows.push(`<tr><td>${p.name}</td><td>${n} solved · ${packStars(p.id)} ★</td></tr>`); }
   const bests = Object.entries(progress.best).filter(([, v]) => v.t !== undefined).sort((a, b) => b[1].t - a[1].t).slice(0, 8)
-    .map(([k, v]) => { const p = k.split(':'); return `<tr><td>${p[0] === 'L' ? `Level ${p[3]} · ${p[1].toUpperCase()} ${E.DIFF_NAMES[p[2]]}` : p[0] === 'D' ? `Daily ${p[1].toUpperCase()} ${p[2]}` : 'Endless'}</td><td>${fmt(v.t)}${v.m !== undefined ? ' · ' + v.m + ' moves' : ''}</td></tr>`; }).join('');
+    .map(([k, v]) => { const p = k.split(':'); return `<tr><td>${p[0] === 'L' ? `${(PACK[p[1]] || { name: p[1].toUpperCase() }).name} ${E.DIFF_NAMES[p[2]] || ''} · ${p[3]}` : p[0] === 'D' ? `Daily ${p[2]}` : 'Endless'}</td><td>${fmt(v.t)}${v.m !== undefined ? ' · ' + v.m + ' moves' : ''}</td></tr>`; }).join('');
   sheet(`<h2>Statistics</h2>
     <div class="statgrid"><div class="stat"><b>${stats.solved}</b><span>Puzzles solved</span></div><div class="stat"><b>${stats.arrows}</b><span>Arrows unwound</span></div>
-    <div class="stat"><b>${stats.perfect}</b><span>Flawless clears</span></div><div class="stat"><b>${stats.streak}</b><span>Daily streak</span></div>
-    <div class="stat"><b>${stats.mistakes}</b><span>Blocked taps</span></div><div class="stat"><b>${stats.hints}</b><span>Hints used</span></div>
+    <div class="stat"><b>${totalStars()} ★</b><span>Stars earned</span></div><div class="stat"><b>${streakNow()}</b><span>Daily streak</span></div>
+    <div class="stat"><b>${stats.perfect}</b><span>Flawless clears</span></div><div class="stat"><b>${stats.mistakes}</b><span>Blocked taps</span></div><div class="stat"><b>${stats.hints}</b><span>Hints used</span></div>
     <div class="stat"><b>${fmt(stats.ms)}</b><span>Time played</span></div><div class="stat"><b>${Math.max(0, ...Object.values(progress.endlessBest))}</b><span>Longest endless run</span></div></div>
-    ${rows.length ? `<div class="label">Solved by difficulty</div><table class="recs">${rows.join('')}</table>` : ''}
+    ${rows.length ? `<div class="label">By puzzle type</div><table class="recs">${rows.join('')}</table>` : ''}
     ${bests ? `<div class="label" style="margin-top:14px">Personal bests</div><table class="recs">${bests}</table>` : ''}
     <button class="big" style="margin-top:14px" data-act="close">Close</button>`);
 }
 
-/* ======================= home screen ======================= */
+/* ======================= menu screens ======================= */
+let curScreen = 'home';
 function showScreen(id) {
+  curScreen = id;
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  $('#tabs').style.display = id === 'game' || id === 'pack' ? 'none' : '';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === id));
   if (id === 'game') requestAnimationFrame(() => { resize(); fitView(); });
   if (id === 'home') renderHome();
+  if (id === 'pack') renderPack();
+  if (id === 'daily') renderDaily();
+  bgfx.run(id === 'home');
 }
-let levelPages = 1;
+
+/* ---- little preview pictures of puzzles (drawn once, cached) ---- */
+const pvCache = new Map();
+function previewPuzzle(spec) {
+  const k = JSON.stringify([spec.pack, spec.diff, spec.shape, spec.seed]);
+  if (!pvCache.has(k)) { try { pvCache.set(k, E.makePuzzle(spec)); } catch (e) { pvCache.set(k, null); } }
+  return pvCache.get(k);
+}
+function drawPreview(canvas, spec, opt) {
+  opt = opt || {};
+  const P = previewPuzzle(spec); if (!P) return;
+  const r = canvas.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1), W = r.width, H = r.height; if (!W || !H) return;
+  canvas.width = W * d; canvas.height = H * d; const x = canvas.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); x.clearRect(0, 0, W, H);
+  const geo = geometry(P), ink = isDark() ? '#eef1f6' : '#18213a', s = P.surf;
+  let proj, faceVis = () => true, k;
+  if (s.kind === 'flat') {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const c of s.cells) if (c.on) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x + 1); y1 = Math.max(y1, c.y + 1); }
+    const pad = opt.pad || 12; k = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0));
+    const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+    proj = p => [ox + p[0] * k, oy + p[1] * k];
+  } else {
+    const [X, Y, Z] = s.dims, c = [X / 2, Y / 2, Z / 2], R = mul(rotM([1, 0, 0], 0.5), rotM([0, 1, 0], -0.66)), diag = Math.hypot(X, Y, Z), cam = diag * 3.2;
+    k = Math.min(W, H) * 0.92 / diag;
+    proj = p => { const a = p[0] - c[0], b = p[1] - c[1], e = p[2] - c[2], qx = R[0] * a + R[1] * b + R[2] * e, qy = R[3] * a + R[4] * b + R[5] * e, qz = R[6] * a + R[7] * b + R[8] * e, f = cam / (cam - qz); return [W / 2 + qx * k * f, H / 2 - qy * k * f]; };
+    const fz = n => { const t = AX[n]; return R[6] * t[0] + R[7] * t[1] + R[8] * t[2]; };
+    faceVis = f => f < 0 || fz(s.faces[f].n) > 0.05;
+    for (const f of s.faces) {
+      const z = fz(f.n); if (z <= 0.05) continue;
+      const ax = f.n >> 1, a1 = (ax + 1) % 3, a2 = (ax + 2) % 3, v = f.n % 2 === 0 ? s.dims[ax] : 0, D = s.dims;
+      const cor = (i, j) => { const p = [0, 0, 0]; p[ax] = v; p[a1] = i; p[a2] = j; return proj(p); };
+      const q = [cor(0, 0), cor(D[a1], 0), cor(D[a1], D[a2]), cor(0, D[a2])], m = 0.86 + 0.14 * z, base = isDark() ? [44, 50, 62] : [255, 254, 251];
+      x.fillStyle = `rgb(${base.map(v => Math.round(v * m)).join(',')})`; x.beginPath(); q.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath(); x.fill();
+      x.strokeStyle = 'rgba(0,0,0,.08)'; x.stroke();
+    }
+  }
+  x.strokeStyle = ink; x.fillStyle = ink; x.lineWidth = Math.max(0.8, Math.min(2.2, k * 0.1)); x.lineCap = 'round'; x.lineJoin = 'round';
+  x.beginPath();
+  for (const g of geo) {
+    let pen = false;
+    for (let i = 0; i < g.pts.length - 1 && g.cum[i] < g.L - 1e-6; i++) {
+      if (!faceVis(g.face[i])) { pen = false; continue; }
+      const a = proj(g.pts[i]), b = proj(g.pts[i + 1]); if (!pen) x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); pen = true;
+    }
+  }
+  x.stroke(); x.beginPath();
+  for (const g of geo) { // arrowheads
+    const hi = g.cum.findIndex(c => c >= g.L - 1e-6); if (hi < 0 || !faceVis(g.face[hi])) continue;
+    const h = g.pts[hi], t = AX[P.arrows[g.i].hd], N = AX[g.n], B = [N[1] * t[2] - N[2] * t[1], N[2] * t[0] - N[0] * t[2], N[0] * t[1] - N[1] * t[0]];
+    const tip = proj([h[0] + t[0] * 0.38, h[1] + t[1] * 0.38, h[2] + t[2] * 0.38]), l = proj([h[0] + B[0] * 0.22, h[1] + B[1] * 0.22, h[2] + B[2] * 0.22]), rr = proj([h[0] - B[0] * 0.22, h[1] - B[1] * 0.22, h[2] - B[2] * 0.22]);
+    x.moveTo(tip[0], tip[1]); x.lineTo(l[0], l[1]); x.lineTo(rr[0], rr[1]); x.closePath();
+  }
+  x.fill();
+}
+const previewSpec = (packId, diff, n) => Object.assign(levelSpec(packId, diff || 'hard', n || 1), { seed: E.hashStr('preview|' + packId + '|' + (diff || 'hard') + '|' + (n || 1)) });
+
+/* ---- main menu ---- */
 function renderHome() {
-  const seg = (el, k) => el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
-  seg($('#typeSeg'), 'type'); seg($('#modeSeg'), 'mode');
+  $('#starCount').textContent = totalStars(); $('#streakCount').textContent = streakNow();
+  const sg = LS.get('game', null), pb = $('#playBtn');
+  if (sg) {
+    const pk = packOf(sg.spec); pb.style.setProperty('--pack', pk.color);
+    $('#playTitle').textContent = 'Continue';
+    $('#playSub').textContent = `${sg.kind === 'level' ? pk.name + ' · Level ' + sg.spec.n : sg.kind === 'daily' ? 'Daily challenge' : 'Endless #' + sg.endlessN} · ${E.DIFF_NAMES[sg.spec.diff]} · ${sg.left} arrows left`;
+  } else {
+    const pk = PACK[prefs.pack], n = highestCleared(pk.id, prefs.diff) + 1; pb.style.setProperty('--pack', pk.color);
+    $('#playTitle').textContent = 'Play';
+    $('#playSub').textContent = `${pk.name} · ${E.DIFF_NAMES[prefs.diff]} · Level ${n}`;
+  }
+  const d = today(), done = DAILIES.filter(x => progress.daily[d + ':' + x.kind]).length;
+  $('#dailyBannerSub').textContent = done === DAILIES.length ? 'All done today. Come back tomorrow!' : `${done} of ${DAILIES.length} done · new in ${untilMidnight()}`;
+  $('#dailyDots').innerHTML = DAILIES.map(x => `<i class="${progress.daily[d + ':' + x.kind] ? 'on' : ''}"></i>`).join('');
+  let cl = 0; for (const p of PACKS) cl += packCleared(p.id);
+  $('#packsSub').textContent = `${cl} level${cl === 1 ? '' : 's'} cleared`;
+  const box = $('#packs');
+  box.innerHTML = PACKS.map((p, i) => {
+    const st = packStars(p.id), cleared = packCleared(p.id), goal = Math.max(10, Math.ceil((cleared + 1) / 10) * 10);
+    return `<button class="pack ${p.wide ? 'wide' : ''} rise" style="--pack:${p.color};animation-delay:${i * 60}ms" data-pack="${p.id}">
+      <div class="pv"><canvas></canvas><span class="tag">${p.type === '3d' ? '3D' : '2D'}</span></div>
+      <div class="body"><b>${p.name}</b><span class="sub">${p.blurb}</span>
+      <div class="meter"><div class="bar"><i style="width:${Math.min(100, cleared / goal * 100)}%"></i></div>${STAR(true)}${st}</div></div></button>`;
+  }).join('');
+  box.querySelectorAll('.pack').forEach(b => b.onclick = () => { prefs.pack = b.dataset.pack; savePrefs(); showScreen('pack'); });
+  requestAnimationFrame(() => box.querySelectorAll('.pack').forEach(b => drawPreview(b.querySelector('canvas'), previewSpec(b.dataset.pack, b.dataset.pack === 'maze' ? 'hard' : 'expert'), { pad: 10 })));
+}
+function untilMidnight() { const n = new Date(), m = new Date(n); m.setHours(24, 0, 0, 0); const s = Math.floor((m - n) / 1000); return `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m`; }
+$('#playBtn').onclick = () => {
+  const sg = LS.get('game', null);
+  if (sg) return newGame(sg.spec, sg.kind, sg.mode, sg, 'home');
+  const pk = PACK[prefs.pack], mode = prefs.mode === 'endless' ? 'relax' : prefs.mode;
+  newGame(levelSpec(pk.id, prefs.diff, highestCleared(pk.id, prefs.diff) + 1), 'level', mode, null, 'home');
+};
+$('#dailyBanner').onclick = () => showScreen('daily');
+$('#homeSettings').onclick = openSettings;
+
+/* ---- a puzzle type: difficulty, mode, levels ---- */
+function renderPack() {
+  const pk = PACK[prefs.pack], scr = $('#pack'); scr.style.setProperty('--pack', pk.color);
+  $('#packTitle').textContent = pk.name; $('#packStars').textContent = packStars(pk.id); $('#packBlurb').textContent = pk.blurb;
+  $('#diffs').innerHTML = E.DIFFS.map(d => { const n = Object.keys(clearedSet(pk.id, d)).length; return `<button class="dchip ${prefs.diff === d ? 'on' : ''}" data-d="${d}">${E.DIFF_NAMES[d]}<small>${n ? n + ' cleared' : 'new'}</small></button>`; }).join('');
+  $('#modes').innerHTML = Object.entries(MODES).map(([k, m]) => `<button class="mode ${prefs.mode === k ? 'on' : ''}" data-m="${k}"><svg viewBox="0 0 24 24">${m.icon}</svg>${m.name}</button>`).join('');
   $('#modeHelp').textContent = MODE_HELP[prefs.mode];
-  $('#diffChips').innerHTML = E.DIFFS.map(d => { const n = Object.keys(clearedSet(prefs.type, d)).length; return `<button class="chip ${prefs.diff === d ? 'on' : ''}" data-d="${d}">${E.DIFF_NAMES[d]}${n ? `<small>${n}</small>` : ''}</button>`; }).join('');
   const la = $('#levelArea');
   if (prefs.mode === 'endless') {
-    const b = progress.endlessBest[prefs.type + '-' + prefs.diff] || 0;
-    la.innerHTML = `<button class="big" id="endlessGo">Start endless from ${E.DIFF_NAMES[prefs.diff]}</button><div class="small" style="margin-top:8px">Gets harder every three puzzles.${b ? ' Your longest run here: ' + b + '.' : ''}</div>`;
-    $('#endlessGo').onclick = () => { progress.endlessSalt = (progress.endlessSalt || 0) + 1; saveProgress(); newGame(endlessSpec(prefs.type, prefs.diff, 1), 'endless', 'endless', { history: [], endlessN: 1, startDiff: prefs.diff, hearts: 3 }); };
+    const b = progress.endlessBest[pk.id + '-' + prefs.diff] || 0;
+    la.innerHTML = `<button class="endless btn3d" id="endlessGo"><svg viewBox="0 0 24 24" style="color:#fff">${MODES.endless.icon}</svg><div><b>Start endless</b><small>From ${E.DIFF_NAMES[prefs.diff]}${b ? ' · best run ' + b : ''}</small></div></button>`;
+    $('#endlessGo').onclick = () => { progress.endlessSalt = (progress.endlessSalt || 0) + 1; saveProgress(); newGame(endlessSpec(pk.id, prefs.diff, 1), 'endless', 'endless', { history: [], endlessN: 1, startDiff: prefs.diff, hearts: 3 }, 'pack'); };
   } else {
-    const hi = highestCleared(prefs.type, prefs.diff), done = clearedSet(prefs.type, prefs.diff), shown = Math.max(18, Math.ceil((hi + 2) / 6) * 6) * levelPages;
-    let html = `<div class="lvhead"><div class="label" style="margin:0">Levels</div><span>${Object.keys(done).length} cleared</span></div><div class="levels">`;
-    for (let n = 1; n <= shown; n++) html += `<button class="lv ${done[n] ? 'done' : ''}" data-n="${n}" ${n > hi + 1 ? 'disabled' : ''}>${n}</button>`;
-    html += `</div><button class="more" id="moreLv">Show more levels</button>`;
-    la.innerHTML = html;
-    la.querySelectorAll('.lv').forEach(b => b.onclick = () => newGame(levelSpec(prefs.type, prefs.diff, +b.dataset.n), 'level', prefs.mode));
-    $('#moreLv').onclick = () => { levelPages++; renderHome(); };
+    const hi = highestCleared(pk.id, prefs.diff), done = clearedSet(pk.id, prefs.diff), shown = Math.max(12, Math.ceil((hi + 9) / 4) * 4);
+    let html = '<div class="levels">';
+    for (let n = 1; n <= shown; n++) {
+      const st = starsFor(levelId(pk.id, prefs.diff, n)), locked = n > hi + 1;
+      html += `<button class="lv ${done[n] ? 'done' : ''} ${n === hi + 1 ? 'next' : ''}" data-n="${n}" ${locked ? 'disabled' : ''}>${locked ? '<svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>' : n}
+        ${done[n] ? `<span class="st">${[0, 1, 2].map(k => STAR(k < st)).join('')}</span>` : ''}</button>`;
+    }
+    la.innerHTML = html + '</div>';
+    la.querySelectorAll('.lv').forEach(b => b.onclick = () => newGame(levelSpec(pk.id, prefs.diff, +b.dataset.n), 'level', prefs.mode, null, 'pack'));
   }
-  const d = today(); const D = t => { const sp = dailySpec(t, d), ok = progress.daily[d + ':' + t]; return `<button data-t="${t}">${ok ? '<span class="ok">✓</span>' : ''}<b>${t === '2d' ? '2D' : '3D'} · ${shapeName(sp)}</b><span>${E.DIFF_NAMES[sp.diff]} · ${d}</span></button>`; };
-  $('#dailyBox').innerHTML = D('2d') + D('3d');
-  $('#dailyBox').querySelectorAll('button').forEach(b => b.onclick = () => newGame(dailySpec(b.dataset.t, d), 'daily', prefs.mode === 'endless' ? 'relax' : prefs.mode));
-  const sg = LS.get('game', null);
-  $('#continueCard').classList.toggle('on', !!sg);
-  if (sg) $('#continueInfo').textContent = `${sg.kind === 'level' ? 'Level ' + sg.spec.n : sg.kind === 'daily' ? 'Daily ' + sg.spec.date : 'Endless #' + sg.endlessN} · ${sg.spec.type.toUpperCase()} ${E.DIFF_NAMES[sg.spec.diff]} · ${sg.left} of ${sg.total} arrows left`;
+  requestAnimationFrame(() => drawPreview($('#packHero'), previewSpec(pk.id, prefs.diff === 'easy' ? 'medium' : prefs.diff === 'impossible' || prefs.diff === 'nightmare' ? 'extreme' : prefs.diff, 2), { pad: 16 }));
 }
-$('#typeSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.type = b.dataset.v; levelPages = 1; savePrefs(); renderHome(); } };
-$('#modeSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.mode = b.dataset.v; savePrefs(); renderHome(); } };
-$('#diffChips').onclick = e => { const b = e.target.closest('.chip'); if (b) { prefs.diff = b.dataset.d; levelPages = 1; savePrefs(); renderHome(); } };
-$('#continueBtn').onclick = () => { const sg = LS.get('game', null); if (sg) newGame(sg.spec, sg.kind, sg.mode, sg); };
-$('#openSettings').onclick = openSettings; $('#openStats').onclick = openStats;
+$('#diffs').onclick = e => { const b = e.target.closest('.dchip'); if (b) { prefs.diff = b.dataset.d; savePrefs(); renderPack(); } };
+$('#modes').onclick = e => { const b = e.target.closest('.mode'); if (b) { prefs.mode = b.dataset.m; savePrefs(); renderPack(); } };
+$('#packBack').onclick = () => showScreen('home');
+
+/* ---- daily challenges ---- */
+let dailyTimer = null;
+function renderDaily() {
+  const d = today(), st = streakNow();
+  $('#streakBig').textContent = st;
+  $('#streakTxt').textContent = st ? 'Finish any daily challenge each day to keep it going.' : 'Finish a daily challenge to start a streak.';
+  const days = []; for (let k = 6; k >= 0; k--) { const t = new Date(); t.setDate(t.getDate() - k); days.push(t); }
+  $('#week').innerHTML = days.map(t => {
+    const key = dateKey(t), n = DAILIES.filter(x => progress.daily[key + ':' + x.kind]).length;
+    return `<div class="day ${n === DAILIES.length ? 'done' : n ? 'part' : ''} ${key === d ? 'today' : ''}">${'SMTWTFS'[t.getDay()]}<i>${n === DAILIES.length ? '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : t.getDate()}</i></div>`;
+  }).join('');
+  $('#dailyCards').innerHTML = DAILIES.map((x, i) => {
+    const sp = dailySpec(x.kind, d), pk = PACK[x.pack], ok = progress.daily[d + ':' + x.kind], st = starsFor(`D:${x.kind}:${d}`);
+    return `<button class="dcard rise ${ok ? 'done' : ''}" style="--pack:${pk.color};animation-delay:${i * 70}ms" data-k="${x.kind}"><div class="pv"><canvas></canvas></div>
+      <div class="body"><div class="k">${pk.name} · ${E.DIFF_NAMES[sp.diff]}</div><b>${x.name}</b><div class="sub">${shapeName(sp)} · ${x.note}</div>
+      <span class="go">${ok ? `${[0, 1, 2].map(k => k < st ? '★' : '☆').join('')} Done · play again` : 'Play ▸'}</span></div></button>`;
+  }).join('');
+  $('#dailyCards').querySelectorAll('.dcard').forEach(b => b.onclick = () => { const x = DAILIES.find(q => q.kind === b.dataset.k); newGame(dailySpec(x.kind, d), 'daily', x.mode, null, 'daily'); });
+  requestAnimationFrame(() => $('#dailyCards').querySelectorAll('.dcard').forEach(b => { const sp = dailySpec(b.dataset.k, d); drawPreview(b.querySelector('canvas'), Object.assign({}, sp, { diff: sp.type === '3d' ? 'medium' : 'hard' }), { pad: 10 }); }));
+  const tick = () => { if (curScreen !== 'daily') { clearInterval(dailyTimer); dailyTimer = null; return; } const n = new Date(), m = new Date(n); m.setHours(24, 0, 0, 0); const s = Math.floor((m - n) / 1000); $('#countdown').textContent = `New challenges in ${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+  tick(); if (!dailyTimer) dailyTimer = setInterval(tick, 1000);
+}
+$('#dailyBack').onclick = () => showScreen('home');
+$('#tabs').onclick = e => { const t = e.target.closest('.tab'); if (!t) return; const v = t.dataset.tab; if (v === 'stats') openStats(); else if (v === 'settings') openSettings(); else showScreen(v); };
+
+/* ---- the main menu's background: a few arrows quietly winding across the screen ---- */
+const bgfx = (() => {
+  const c = $('#bgfx'), x = c.getContext('2d'); let on = false, snakes = [], W = 0, H = 0, step = 26, last = 0;
+  function size() { const d = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; c.width = W * d; c.height = H * d; x.setTransform(d, 0, 0, d, 0, 0); }
+  function spawn() {
+    const cols = Math.ceil(W / step), rows = Math.ceil(H / step), d = (Math.random() * 4) | 0, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const p = d === 0 ? [-1, (Math.random() * rows) | 0] : d === 1 ? [cols, (Math.random() * rows) | 0] : d === 2 ? [(Math.random() * cols) | 0, -1] : [(Math.random() * cols) | 0, rows];
+    return { pts: [p], dir: dirs[d], len: 6 + ((Math.random() * 10) | 0), t: 0, speed: 0.04 + Math.random() * 0.04 };
+  }
+  function frame(now) {
+    if (!on) return;
+    if (!last) last = now; const dt = Math.min(50, now - last) / 16.7; last = now;
+    x.clearRect(0, 0, W, H);
+    const ink = isDark() ? 'rgba(238,241,246,' : 'rgba(24,33,58,';
+    while (snakes.length < Math.max(6, Math.round(W * H / 52000))) snakes.push(spawn());
+    for (const s of snakes) {
+      s.t += s.speed * dt;
+      while (s.t >= 1) {
+        s.t -= 1; const h = s.pts[s.pts.length - 1];
+        if (Math.random() < 0.22) { const turn = Math.random() < 0.5 ? [s.dir[1], -s.dir[0]] : [-s.dir[1], s.dir[0]]; s.dir = turn; }
+        s.pts.push([h[0] + s.dir[0], h[1] + s.dir[1]]); if (s.pts.length > s.len) s.pts.shift();
+      }
+      const P = s.pts.map(p => [p[0] * step + step / 2, p[1] * step + step / 2]), h = P[P.length - 1];
+      const hx = h[0] + s.dir[0] * step * s.t, hy = h[1] + s.dir[1] * step * s.t;
+      x.strokeStyle = ink + '.10)'; x.fillStyle = ink + '.13)'; x.lineWidth = 2.2; x.lineCap = 'round'; x.lineJoin = 'round';
+      x.beginPath(); x.moveTo(P[0][0], P[0][1]); for (const p of P) x.lineTo(p[0], p[1]); x.lineTo(hx, hy); x.stroke();
+      const a = Math.atan2(s.dir[1], s.dir[0]); x.save(); x.translate(hx, hy); x.rotate(a); x.beginPath(); x.moveTo(9, 0); x.lineTo(-2, -6); x.lineTo(-2, 6); x.closePath(); x.fill(); x.restore();
+      const t0 = P[0]; s.dead = (t0[0] < -step * 3 || t0[1] < -step * 3 || t0[0] > W + step * 3 || t0[1] > H + step * 3) && (hx < -step || hy < -step || hx > W + step || hy > H + step);
+    }
+    snakes = snakes.filter(s => !s.dead);
+    requestAnimationFrame(frame);
+  }
+  addEventListener('resize', () => { if (on) size(); });
+  return { run(v) { if (v === on) return; on = v; if (on) { size(); last = 0; requestAnimationFrame(frame); } else x.clearRect(0, 0, W, H); } };
+})();
 
 /* ======================= game buttons ======================= */
-$('#backBtn').onclick = () => { if (G && G.P && !G.done) autosave(); if (G && G.autoNext) clearTimeout(G.autoNext); G = null; showScreen('home'); };
+$('#backBtn').onclick = () => { const to = (G && G.from) || 'home'; if (G && G.P && !G.done) autosave(); if (G && G.autoNext) clearTimeout(G.autoNext); G = null; showScreen(to); };
 $('#pauseBtn').onclick = pause;
 $('#undoBtn').onclick = undo;
 $('#hintBtn').onclick = hint;
@@ -684,5 +897,5 @@ window.addEventListener('keydown', e => {
 /* test hook (used by the automated browser tests; harmless otherwise) */
 window.__unwind = { get G() { return G; }, V, project, pick, attempt, hint, undo, draw, E };
 
-applyTheme(); resize(); renderHome();
+applyTheme(); resize(); showScreen('home');
 })();

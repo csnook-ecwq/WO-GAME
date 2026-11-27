@@ -1,7 +1,15 @@
-# Arrow Unwind
+# UNWIND
 
 Open `index.html` in any modern browser (phone, tablet or desktop). It is one self-contained file:
 no network, accounts, ads or purchases. Progress, settings and statistics are saved on the device.
+
+## Menus
+- **Main menu**: Play / Continue, your stars and daily streak, the daily challenges banner, and five puzzle
+  packs with live previews: **Classic** (square and tall boards), **Shapes** (silhouettes), **Mega Maze**,
+  **Cube** and **Prisms** (towers, slabs, bars, bricks).
+- **Pack screen**: difficulty tabs, mode (Relax, Classic, Challenge, Endless) and a level grid with stars.
+- **Daily challenges**: Shape of the day, Cube of the day and a timed Daily rush; streak, week strip, countdown.
+- **Stars**: 3 for no blocked taps and no hints, 2 for at most two blocked taps and one hint, otherwise 1.
 
 ## Play
 - **Tap an arrow** and it slides out head-first, its body following its own winding path. It only goes

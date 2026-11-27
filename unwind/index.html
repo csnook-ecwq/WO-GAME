@@ -3,115 +3,225 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#f6f5f1">
+<meta name="theme-color" content="#f4f2ec">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Arrow Unwind">
-<title>Arrow Unwind</title>
+<meta name="apple-mobile-web-app-title" content="UNWIND">
+<title>UNWIND</title>
 <style>
 :root{
-  --bg:#f6f5f1; --panel:#ffffff; --ink:#1b2540; --muted:#6b7385; --line:rgba(27,37,64,.12); --soft:rgba(27,37,64,.05);
-  --accent:#2f6df6; --bad:#e0453a; --good:#1f9d6a; --shadow:0 10px 40px rgba(20,30,60,.12);
+  --bg:#f4f2ec; --bg2:#ebe7dd; --panel:#ffffff; --ink:#18213a; --muted:#6b7385; --line:rgba(24,33,58,.12); --soft:rgba(24,33,58,.06);
+  --accent:#2f6df6; --bad:#e5484d; --good:#18a06a; --gold:#f5b301; --flame:#ff6a2b;
+  --shadow:0 12px 32px rgba(24,33,58,.12); --press:0 4px 0 rgba(24,33,58,.16);
+  --pack:#2f6df6;
 }
 :root[data-theme="dark"]{
-  --bg:#12151b; --panel:#1b2029; --ink:#e7eaf0; --muted:#8e97a8; --line:rgba(231,234,240,.12); --soft:rgba(231,234,240,.05);
-  --accent:#5b8cff; --bad:#ff5d50; --good:#3cc58e; --shadow:0 10px 40px rgba(0,0,0,.4);
+  --bg:#10131a; --bg2:#171b24; --panel:#1c212c; --ink:#eef1f6; --muted:#939cae; --line:rgba(238,241,246,.12); --soft:rgba(238,241,246,.06);
+  --accent:#5b8cff; --bad:#ff5d5d; --good:#3cc58e; --shadow:0 12px 32px rgba(0,0,0,.45); --press:0 4px 0 rgba(0,0,0,.45);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
-  font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font:15px/1.35 ui-rounded,"SF Pro Rounded","Nunito","Avenir Next",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   -webkit-user-select:none;user-select:none;overscroll-behavior:none;-webkit-text-size-adjust:100%}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+svg{display:block}
 .screen{position:fixed;inset:0;display:none;flex-direction:column}
 .screen.on{display:flex}
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.wrap{width:100%;max-width:560px;margin:0 auto;padding:0 16px}
 .safe-top{padding-top:max(10px,env(safe-area-inset-top))}
-.safe-bot{padding-bottom:max(10px,env(safe-area-inset-bottom))}
 
-/* ---------- home ---------- */
-#home{overflow-y:auto;-webkit-overflow-scrolling:touch;align-items:center}
-.home-in{width:100%;max-width:560px;padding:0 18px 28px}
-.brand{display:flex;align-items:center;gap:12px;margin:18px 0 6px}
-.brand svg{width:40px;height:40px}
-.brand h1{font-size:26px;letter-spacing:-.02em;margin:0;font-weight:700}
-.tag{color:var(--muted);margin:0 0 18px}
-.topicons{margin-left:auto;display:flex;gap:4px}
-.ibtn{width:42px;height:42px;border-radius:21px;display:grid;place-items:center;color:var(--ink)}
-.ibtn:active{background:var(--soft)}
-.ibtn svg{width:22px;height:22px}
-.card{background:var(--panel);border-radius:18px;box-shadow:0 1px 0 var(--line),var(--shadow);padding:16px;margin:0 0 14px}
-.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:600}
-.seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;gap:3px;margin-bottom:14px}
-.seg button{flex:1;padding:9px 4px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted)}
-.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
-.chip{padding:8px 12px;border-radius:999px;border:1px solid var(--line);font-size:14px;font-weight:600;color:var(--muted);position:relative}
-.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.chip small{font-weight:500;opacity:.7;margin-left:4px}
-.modehelp{font-size:13px;color:var(--muted);margin:-6px 0 14px;min-height:18px}
-.big{width:100%;height:52px;border-radius:14px;background:var(--ink);color:var(--bg);font-weight:700;font-size:16px}
-.big:active{opacity:.85}
-.big.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
-.row{display:flex;gap:10px}
-.levels{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px}
-.lv{aspect-ratio:1;border-radius:12px;background:var(--soft);font-weight:700;font-size:15px;display:grid;place-items:center;position:relative}
-.lv.done{background:var(--ink);color:var(--bg)}
-.lv.done::after{content:"";position:absolute;right:6px;top:6px;width:6px;height:6px;border-radius:3px;background:var(--good)}
-.lv:disabled{opacity:.32;cursor:default}
-.lvhead{display:flex;align-items:baseline;justify-content:space-between}
-.lvhead span{color:var(--muted);font-size:13px}
-.more{margin-top:10px;width:100%;padding:10px;border-radius:12px;color:var(--muted);font-weight:600}
-.daily{display:flex;gap:10px}
-.daily button{flex:1;text-align:left;padding:14px;border-radius:14px;background:var(--soft);position:relative}
-.daily b{display:block;font-size:16px}
-.daily span{color:var(--muted);font-size:13px}
-.daily .ok{position:absolute;right:12px;top:12px;color:var(--good);font-weight:700}
-.continue{display:none}
-.continue.on{display:block}
+/* chunky game buttons */
+.btn3d{position:relative;border-radius:18px;background:var(--pack);color:#fff;font-weight:800;letter-spacing:.02em;
+  box-shadow:0 5px 0 color-mix(in srgb,var(--pack) 70%,#000),0 10px 24px color-mix(in srgb,var(--pack) 35%,transparent);transition:transform .08s,box-shadow .08s}
+.btn3d:active{transform:translateY(4px);box-shadow:0 1px 0 color-mix(in srgb,var(--pack) 70%,#000),0 4px 10px color-mix(in srgb,var(--pack) 30%,transparent)}
+.pop{animation:pop .45s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes pop{from{transform:scale(.6);opacity:0}}
+.rise{animation:rise .45s cubic-bezier(.2,.9,.3,1) both}
+@keyframes rise{from{transform:translateY(18px);opacity:0}}
+
+/* ---------- top status chips ---------- */
+.topbar{display:flex;align-items:center;gap:8px;padding:6px 0 4px}
+.pill{display:flex;align-items:center;gap:6px;height:36px;padding:0 12px 0 8px;border-radius:18px;background:var(--panel);box-shadow:0 1px 0 var(--line),0 4px 12px rgba(0,0,0,.05);font-weight:800;font-variant-numeric:tabular-nums}
+.pill svg{width:22px;height:22px}
+.grow{flex:1}
+.round{width:40px;height:40px;border-radius:20px;display:grid;place-items:center;background:var(--panel);box-shadow:0 1px 0 var(--line),0 4px 12px rgba(0,0,0,.05)}
+.round svg{width:20px;height:20px}
+.round:active{transform:scale(.94)}
+
+/* ---------- main menu ---------- */
+#home{background:radial-gradient(130% 70% at 50% 0%,var(--bg2),var(--bg) 70%)}
+#bgfx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#home .scroll{position:relative;z-index:1}
+.logo{text-align:center;margin:18px 0 6px}
+.logo h1{margin:0;font-size:clamp(46px,15vw,72px);line-height:.95;font-weight:900;letter-spacing:.06em;
+  background:linear-gradient(180deg,var(--ink),color-mix(in srgb,var(--ink) 70%,var(--accent)));-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo .mark{width:64px;height:64px;margin:0 auto 10px}
+.logo p{margin:8px 0 0;color:var(--muted);font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:12px}
+.playbtn{display:flex;align-items:center;gap:14px;width:100%;min-height:84px;padding:14px 20px;margin:18px 0 14px;text-align:left;--pack:#2f6df6}
+.playbtn .ico{width:52px;height:52px;border-radius:26px;background:rgba(255,255,255,.22);display:grid;place-items:center;flex:0 0 52px}
+.playbtn .ico svg{width:26px;height:26px}
+.playbtn b{display:block;font-size:24px;line-height:1.1}
+.playbtn small{display:block;font-weight:700;opacity:.88;font-size:13px;margin-top:2px}
+.daily-banner{display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border-radius:20px;text-align:left;margin-bottom:22px;
+  background:linear-gradient(120deg,#ff8a3d,#ff5d7a);color:#fff;box-shadow:0 5px 0 #c9455d,0 10px 24px rgba(255,93,122,.35)}
+.daily-banner:active{transform:translateY(3px);box-shadow:0 2px 0 #c9455d}
+.daily-banner .flame{width:46px;height:46px;border-radius:23px;background:rgba(255,255,255,.22);display:grid;place-items:center;flex:0 0 46px}
+.daily-banner .flame svg{width:26px;height:26px}
+.daily-banner b{display:block;font-size:17px}
+.daily-banner span{font-size:13px;font-weight:700;opacity:.92}
+.daily-banner .dots{display:flex;gap:5px;margin-left:auto}
+.daily-banner .dots i{width:12px;height:12px;border-radius:6px;background:rgba(255,255,255,.35)}
+.daily-banner .dots i.on{background:#fff}
+.section{display:flex;align-items:baseline;justify-content:space-between;margin:0 2px 10px}
+.section h2{margin:0;font-size:20px;font-weight:900}
+.section span{color:var(--muted);font-weight:700;font-size:13px}
+.packs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:96px}
+.pack{position:relative;border-radius:22px;overflow:hidden;background:var(--panel);text-align:left;box-shadow:0 5px 0 color-mix(in srgb,var(--pack) 55%,var(--line)),var(--shadow);transition:transform .1s}
+.pack:active{transform:translateY(3px) scale(.99)}
+.pack.wide{grid-column:1/-1}
+.pack .pv{position:relative;height:132px;background:linear-gradient(160deg,color-mix(in srgb,var(--pack) 16%,var(--panel)),color-mix(in srgb,var(--pack) 6%,var(--panel)))}
+.pack.wide .pv{height:150px}
+.pack canvas{position:absolute;inset:0;width:100%;height:100%}
+.pack .tag{position:absolute;left:10px;top:10px;padding:4px 9px;border-radius:10px;background:var(--pack);color:#fff;font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.pack .body{padding:10px 12px 12px}
+.pack b{display:block;font-size:17px;font-weight:900}
+.pack .sub{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meter{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;font-weight:800;color:var(--muted)}
+.meter .bar{flex:1;height:7px;border-radius:4px;background:var(--soft);overflow:hidden}
+.meter .bar i{display:block;height:100%;border-radius:4px;background:var(--pack)}
+.meter svg{width:14px;height:14px}
+
+/* ---------- tab bar ---------- */
+.tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:max(12px,env(safe-area-inset-bottom));z-index:5;display:flex;gap:4px;padding:6px;border-radius:26px;
+  background:color-mix(in srgb,var(--panel) 92%,transparent);box-shadow:0 1px 0 var(--line),0 12px 30px rgba(0,0,0,.14);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.tab{display:flex;flex-direction:column;align-items:center;gap:1px;width:72px;padding:7px 0 5px;border-radius:20px;font-size:11px;font-weight:800;color:var(--muted)}
+.tab svg{width:24px;height:24px}
+.tab.on{background:var(--ink);color:var(--bg)}
+.tab:active{transform:scale(.95)}
+
+/* ---------- pack screen ---------- */
+.head{display:flex;align-items:center;gap:10px;padding:6px 0 10px}
+.head h1{margin:0;font-size:26px;font-weight:900;flex:1;min-width:0}
+.hero{position:relative;height:170px;border-radius:24px;overflow:hidden;margin-bottom:14px;
+  background:linear-gradient(150deg,color-mix(in srgb,var(--pack) 22%,var(--panel)),color-mix(in srgb,var(--pack) 6%,var(--panel)));box-shadow:0 5px 0 color-mix(in srgb,var(--pack) 50%,var(--line))}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%}
+.hero .blurb{position:absolute;left:14px;bottom:12px;right:14px;font-weight:800;color:var(--ink);text-shadow:0 1px 0 var(--panel)}
+.diffs{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 10px;margin:0 -16px;padding-left:16px;scrollbar-width:none}
+.diffs::-webkit-scrollbar{display:none}
+.dchip{flex:0 0 auto;padding:9px 14px;border-radius:16px;background:var(--panel);font-weight:900;font-size:14px;color:var(--muted);box-shadow:0 3px 0 var(--line)}
+.dchip small{display:block;font-size:11px;font-weight:800;opacity:.8}
+.dchip.on{background:var(--pack);color:#fff;box-shadow:0 3px 0 color-mix(in srgb,var(--pack) 65%,#000)}
+.modes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0 8px}
+.mode{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:16px;background:var(--panel);font-size:12px;font-weight:900;color:var(--muted);box-shadow:0 3px 0 var(--line)}
+.mode svg{width:24px;height:24px}
+.mode.on{color:var(--ink);box-shadow:0 0 0 2.5px var(--pack),0 3px 0 var(--line)}
+.mode.on svg{color:var(--pack)}
+.modehelp{font-size:13px;color:var(--muted);font-weight:600;margin:2px 2px 14px;min-height:18px}
+.levels{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 10px;margin-bottom:40px}
+.lv{position:relative;aspect-ratio:1/1.08;border-radius:18px;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  font-weight:900;font-size:22px;box-shadow:0 4px 0 var(--line)}
+.lv:active{transform:translateY(3px);box-shadow:0 1px 0 var(--line)}
+.lv .st{display:flex;gap:1px}
+.lv .st svg{width:13px;height:13px}
+.lv.done{background:var(--pack);color:#fff;box-shadow:0 4px 0 color-mix(in srgb,var(--pack) 65%,#000)}
+.lv.next{box-shadow:0 0 0 3px var(--pack),0 4px 0 var(--line);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.05)}}
+.lv:disabled{opacity:.45;cursor:default;animation:none}
+.lv:disabled svg.lock{width:20px;height:20px;color:var(--muted)}
+.endless{width:100%;padding:20px;margin-bottom:12px;text-align:left;display:flex;align-items:center;gap:14px}
+.endless svg{width:40px;height:40px}
+.endless b{display:block;font-size:20px}
+.endless small{display:block;font-weight:700;opacity:.9}
+
+/* ---------- daily screen ---------- */
+#daily{background:radial-gradient(130% 60% at 50% 0%,color-mix(in srgb,#ff8a3d 16%,var(--bg)),var(--bg) 70%)}
+.streak{display:flex;align-items:center;gap:14px;padding:16px;border-radius:22px;background:var(--panel);box-shadow:0 4px 0 var(--line),var(--shadow);margin-bottom:14px}
+.streak .snum{font-size:40px;font-weight:900;line-height:1}
+.streak .flame{width:56px;height:56px;flex:0 0 56px}
+.streak .txt b{display:block;font-size:17px}
+.streak .txt span{color:var(--muted);font-weight:700;font-size:13px}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:18px}
+.day{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;font-weight:900;color:var(--muted)}
+.day i{width:36px;height:36px;border-radius:18px;display:grid;place-items:center;background:var(--soft);font-style:normal;font-size:13px;color:var(--muted)}
+.day i svg{width:18px;height:18px}
+.day.done i{background:var(--flame);color:#fff}
+.day.part i{background:color-mix(in srgb,var(--flame) 35%,var(--panel));color:#fff}
+.day.today i{box-shadow:0 0 0 2.5px var(--ink)}
+.dcard{display:flex;width:100%;border-radius:22px;overflow:hidden;background:var(--panel);text-align:left;margin-bottom:12px;box-shadow:0 5px 0 color-mix(in srgb,var(--pack) 55%,var(--line)),var(--shadow)}
+.dcard:active{transform:translateY(3px)}
+.dcard .pv{position:relative;width:118px;flex:0 0 118px;background:linear-gradient(160deg,color-mix(in srgb,var(--pack) 18%,var(--panel)),color-mix(in srgb,var(--pack) 6%,var(--panel)))}
+.dcard canvas{position:absolute;inset:0;width:100%;height:100%}
+.dcard .body{flex:1;padding:14px;min-width:0}
+.dcard .k{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--pack)}
+.dcard b{display:block;font-size:19px;font-weight:900;margin:2px 0}
+.dcard .sub{font-size:13px;color:var(--muted);font-weight:700}
+.dcard .go{margin-top:10px;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:12px;background:var(--pack);color:#fff;font-weight:900;font-size:13px}
+.dcard.done .go{background:var(--good)}
+.countdown{text-align:center;color:var(--muted);font-weight:800;margin:6px 0 110px;font-variant-numeric:tabular-nums}
 
 /* ---------- game ---------- */
 #game{background:var(--bg)}
-.bar{display:flex;align-items:center;gap:6px;padding-left:8px;padding-right:8px;z-index:2}
-.title{flex:1;min-width:0;text-align:center}
-.title b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.title span{font-size:12px;color:var(--muted)}
-.status{display:flex;justify-content:center;align-items:center;gap:14px;font-size:13px;color:var(--muted);min-height:22px;padding:0 12px;font-variant-numeric:tabular-nums}
+.ghud{display:flex;align-items:center;gap:8px;padding-left:12px;padding-right:12px}
+.gtitle{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center}
+.gtitle .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:14px;background:var(--pack);color:#fff;font-weight:900;font-size:15px;box-shadow:0 3px 0 color-mix(in srgb,var(--pack) 65%,#000);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gtitle span{font-size:12px;color:var(--muted);font-weight:700;margin-top:4px;white-space:nowrap}
+.status{display:flex;justify-content:center;align-items:center;gap:12px;font-size:13px;font-weight:800;color:var(--muted);min-height:26px;padding:6px 12px 0;font-variant-numeric:tabular-nums}
+.status .chipi{display:flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;background:var(--panel);box-shadow:0 2px 0 var(--line)}
 .hearts{display:flex;gap:3px}
-.hearts svg{width:18px;height:18px}
-.prog{height:3px;background:var(--soft);margin:6px 16px 0;border-radius:2px;overflow:hidden}
-.prog i{display:block;height:100%;background:var(--ink);width:0;transition:width .3s}
+.hearts svg{width:20px;height:20px}
+.prog{height:6px;background:var(--soft);margin:8px 16px 0;border-radius:3px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--pack);width:0;border-radius:3px;transition:width .3s}
 #stage{position:relative;flex:1;min-height:0;touch-action:none}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-.tools{display:flex;justify-content:space-around;align-items:center;padding-left:10px;padding-right:10px;padding-top:6px}
-.tool{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:58px;padding:6px 4px;border-radius:12px;font-size:11px;color:var(--muted);font-weight:600}
-.tool svg{width:24px;height:24px;color:var(--ink)}
-.tool:active{background:var(--soft)}
-.tool:disabled{opacity:.3}
-.tool.on svg{color:var(--accent)}
-.tool{min-width:52px}
-.toast{position:absolute;left:50%;top:12px;transform:translate(-50%,-10px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;z-index:3}
+.tools{display:flex;justify-content:center;gap:10px;padding:8px 10px max(12px,env(safe-area-inset-bottom))}
+.tool{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--muted);font-weight:800;width:62px}
+.tool .ic{width:52px;height:52px;border-radius:18px;display:grid;place-items:center;background:var(--panel);box-shadow:0 4px 0 var(--line),0 6px 14px rgba(0,0,0,.06);transition:transform .08s}
+.tool .ic svg{width:24px;height:24px;color:var(--ink)}
+.tool:active .ic{transform:translateY(3px);box-shadow:0 1px 0 var(--line)}
+.tool:disabled{opacity:.35}
+.tool.on .ic{background:var(--pack)}
+.tool.on .ic svg{color:#fff}
+.tool.hint .ic{background:var(--gold)}
+.tool.hint .ic svg{color:#3b2a00}
+.toast{position:absolute;left:50%;top:12px;transform:translate(-50%,-10px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;z-index:3}
 .toast.on{opacity:1;transform:translate(-50%,0)}
-.loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-weight:600;z-index:4;background:var(--bg)}
+.loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:var(--muted);font-weight:800;z-index:4;background:var(--bg)}
 .loading.on{display:flex}
-.spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}
+.spin{width:44px;height:44px;border:4px solid var(--line);border-top-color:var(--pack);border-radius:50%;animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 
 /* ---------- sheets ---------- */
-.veil{position:fixed;inset:0;background:rgba(10,14,24,.38);display:none;align-items:flex-end;justify-content:center;z-index:10;padding:12px}
+.veil{position:fixed;inset:0;background:rgba(10,14,24,.42);display:none;align-items:flex-end;justify-content:center;z-index:10;padding:12px}
 .veil.on{display:flex}
 @media (min-width:700px){.veil{align-items:center}}
-.sheet{width:100%;max-width:440px;max-height:88vh;overflow-y:auto;background:var(--panel);border-radius:22px;padding:20px 18px max(18px,env(safe-area-inset-bottom));box-shadow:var(--shadow);animation:up .28s cubic-bezier(.2,.8,.2,1)}
-@keyframes up{from{transform:translateY(30px);opacity:0}}
-.sheet h2{margin:0 0 4px;font-size:21px}
-.sheet p{color:var(--muted);margin:0 0 14px}
-.sheet .big{margin-top:8px}
+.sheet{width:100%;max-width:440px;max-height:88vh;overflow-y:auto;background:var(--panel);border-radius:26px;padding:22px 18px max(18px,env(safe-area-inset-bottom));box-shadow:var(--shadow);animation:up .3s cubic-bezier(.2,.9,.2,1)}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.sheet h2{margin:0 0 4px;font-size:24px;font-weight:900;text-align:center}
+.sheet p{color:var(--muted);margin:0 0 14px;text-align:center;font-weight:600}
+.sheet .left{text-align:left}
+.big{width:100%;height:54px;border-radius:16px;background:var(--ink);color:var(--bg);font-weight:900;font-size:16px;box-shadow:0 4px 0 rgba(0,0,0,.25)}
+.big:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.25)}
+.big.ghost{background:var(--soft);color:var(--ink);box-shadow:0 4px 0 var(--line)}
+.big.packc{background:var(--pack);color:#fff;box-shadow:0 4px 0 color-mix(in srgb,var(--pack) 65%,#000)}
+.row{display:flex;gap:10px}
+.row+.row,.big+.row,.row+.big{margin-top:10px}
+.stars{display:flex;justify-content:center;align-items:flex-end;gap:6px;margin:6px 0 10px}
+.stars svg{width:58px;height:58px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.12))}
+.stars svg:nth-child(2){width:74px;height:74px}
+.stars .s{animation:starpop .5s cubic-bezier(.2,1.7,.4,1) both}
+.stars .s:nth-child(2){animation-delay:.18s}.stars .s:nth-child(3){animation-delay:.36s}
+@keyframes starpop{from{transform:scale(0) rotate(-40deg);opacity:0}}
 .statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}
-.stat{background:var(--soft);border-radius:12px;padding:10px 12px}
-.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
-.stat span{font-size:12px;color:var(--muted)}
-.set{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);gap:12px}
+.stat{background:var(--soft);border-radius:14px;padding:10px 12px}
+.stat b{display:block;font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);font-weight:700}
+.label{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:900}
+.set{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);gap:12px;font-weight:700}
 .set:last-of-type{border-bottom:0}
-.set .seg{margin:0;flex:0 0 auto}
-.set .seg button{padding:6px 10px;font-size:13px}
+.seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;gap:3px}
+.seg button{padding:6px 10px;border-radius:9px;font-weight:800;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .sw{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;flex:0 0 50px;transition:.2s}
 .sw::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.2s}
 .sw.on{background:var(--good)}
@@ -119,57 +229,102 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .swatches{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .swatch{width:28px;height:28px;border-radius:14px;box-shadow:inset 0 0 0 2px var(--line)}
 .swatch.on{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--ink)}
-.small{font-size:12px;color:var(--muted)}
+.chipb{padding:8px 12px;border-radius:12px;background:var(--soft);font-weight:800}
+.small{font-size:12px;color:var(--muted);font-weight:600}
 table.recs{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
-table.recs td{padding:6px 2px;border-bottom:1px solid var(--line)}
+table.recs td{padding:7px 2px;border-bottom:1px solid var(--line);font-weight:700}
 table.recs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+#confetti{position:fixed;inset:0;pointer-events:none;z-index:11}
 </style>
 </head>
 <body>
 
-<!-- ======================= HOME ======================= -->
-<section id="home" class="screen on safe-top safe-bot">
-  <div class="home-in">
-    <div class="brand">
-      <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="1" y="1" width="38" height="38" rx="10" fill="var(--ink)"/><path d="M9 29V17h10v8h8V11" fill="none" stroke="var(--bg)" stroke-width="2.6" stroke-linejoin="round"/><path d="M22.5 15 27 10.5 31.5 15" fill="none" stroke="var(--bg)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <h1>Arrow Unwind</h1>
-      <div class="topicons">
-        <button class="ibtn" id="openStats" aria-label="Statistics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg></button>
-        <button class="ibtn" id="openSettings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+<!-- ======================= MAIN MENU ======================= -->
+<section id="home" class="screen on">
+  <canvas id="bgfx"></canvas>
+  <div class="scroll safe-top">
+    <div class="wrap">
+      <div class="topbar">
+        <div class="pill" title="Stars"><svg viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.4 1.1 6.2L12 17l-5.6 3 1.1-6.2L2.9 9.4l6.3-.9z" fill="var(--gold)"/></svg><span id="starCount">0</span></div>
+        <div class="pill" title="Daily streak"><svg viewBox="0 0 24 24"><path d="M12 2c1 3.5 5 5.6 5 10.4A5 5 0 0 1 12 22a5 5 0 0 1-5-5c0-2.5 1.3-3.6 2.4-4.8.2 1.4.9 2.3 1.9 2.6C10.6 11 11 6 12 2z" fill="var(--flame)"/></svg><span id="streakCount">0</span></div>
+        <div class="grow"></div>
+        <button class="round" id="homeSettings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       </div>
-    </div>
-    <p class="tag">Tap an arrow to slide it out. Clear them all.</p>
 
-    <div class="card continue" id="continueCard">
-      <div class="label">In progress</div>
-      <div class="row"><button class="big" id="continueBtn">Continue</button></div>
-      <div class="small" id="continueInfo" style="margin-top:8px"></div>
-    </div>
+      <div class="logo rise">
+        <svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><rect x="2" y="2" width="60" height="60" rx="18" fill="var(--ink)"/>
+          <path d="M14 48V30h14v12h12V18" fill="none" stroke="var(--bg)" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M33 24l7-7 7 7" fill="none" stroke="var(--bg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="47" cy="44" r="4" fill="var(--flame)"/></svg>
+        <h1>UNWIND</h1>
+        <p>Untangle every arrow</p>
+      </div>
 
-    <div class="card">
-      <div class="label">Puzzle</div>
-      <div class="seg" id="typeSeg"><button data-v="2d">2D Arrows</button><button data-v="3d">3D Cube</button></div>
-      <div class="label">Mode</div>
-      <div class="seg" id="modeSeg"><button data-v="relax">Relax</button><button data-v="classic">Classic</button><button data-v="challenge">Challenge</button><button data-v="endless">Endless</button></div>
-      <div class="modehelp" id="modeHelp"></div>
-      <div class="label">Difficulty</div>
-      <div class="chips" id="diffChips"></div>
-      <div id="levelArea"></div>
-    </div>
+      <button class="playbtn btn3d rise" id="playBtn"><div class="ico"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="#fff"/></svg></div><div><b id="playTitle">Play</b><small id="playSub"></small></div></button>
 
-    <div class="card">
-      <div class="label">Daily puzzles</div>
-      <div class="daily" id="dailyBox"></div>
+      <button class="daily-banner rise" id="dailyBanner">
+        <div class="flame"><svg viewBox="0 0 24 24"><path d="M12 2c1 3.5 5 5.6 5 10.4A5 5 0 0 1 12 22a5 5 0 0 1-5-5c0-2.5 1.3-3.6 2.4-4.8.2 1.4.9 2.3 1.9 2.6C10.6 11 11 6 12 2z" fill="#fff"/></svg></div>
+        <div><b>Daily challenges</b><span id="dailyBannerSub"></span></div>
+        <div class="dots" id="dailyDots"></div>
+      </button>
+
+      <div class="section"><h2>Puzzles</h2><span id="packsSub"></span></div>
+      <div class="packs" id="packs"></div>
     </div>
   </div>
 </section>
 
+<!-- ======================= PACK (a puzzle type) ======================= -->
+<section id="pack" class="screen">
+  <div class="scroll safe-top">
+    <div class="wrap">
+      <div class="head">
+        <button class="round" id="packBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h1 id="packTitle"></h1>
+        <div class="pill"><svg viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.4 1.1 6.2L12 17l-5.6 3 1.1-6.2L2.9 9.4l6.3-.9z" fill="var(--gold)"/></svg><span id="packStars">0</span></div>
+      </div>
+      <div class="hero"><canvas id="packHero"></canvas><div class="blurb" id="packBlurb"></div></div>
+      <div class="label">Difficulty</div>
+      <div class="diffs" id="diffs"></div>
+      <div class="label">Mode</div>
+      <div class="modes" id="modes"></div>
+      <div class="modehelp" id="modeHelp"></div>
+      <div id="levelArea"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= DAILY ======================= -->
+<section id="daily" class="screen">
+  <div class="scroll safe-top">
+    <div class="wrap">
+      <div class="head">
+        <button class="round" id="dailyBack" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <h1>Daily challenges</h1>
+      </div>
+      <div class="streak"><svg class="flame" viewBox="0 0 24 24"><path d="M12 2c1 3.5 5 5.6 5 10.4A5 5 0 0 1 12 22a5 5 0 0 1-5-5c0-2.5 1.3-3.6 2.4-4.8.2 1.4.9 2.3 1.9 2.6C10.6 11 11 6 12 2z" fill="var(--flame)"/></svg>
+        <div class="snum" id="streakBig">0</div><div class="txt"><b>day streak</b><span id="streakTxt"></span></div></div>
+      <div class="week" id="week"></div>
+      <div id="dailyCards"></div>
+      <div class="countdown" id="countdown"></div>
+    </div>
+  </div>
+</section>
+
+<!-- tab bar (menu screens) -->
+<nav class="tabs" id="tabs">
+  <button class="tab on" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>Play</button>
+  <button class="tab" data-tab="daily"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Daily</button>
+  <button class="tab" data-tab="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
+  <button class="tab" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Settings</button>
+</nav>
+
 <!-- ======================= GAME ======================= -->
 <section id="game" class="screen">
-  <div class="bar safe-top">
-    <button class="ibtn" id="backBtn" aria-label="Back to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <div class="title"><b id="gTitle"></b><span id="gSub"></span></div>
-    <button class="ibtn" id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg></button>
+  <div class="ghud safe-top">
+    <button class="round" id="backBtn" aria-label="Back to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="gtitle"><div class="badge" id="gTitle"></div><span id="gSub"></span></div>
+    <button class="round" id="pauseBtn" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg></button>
   </div>
   <div class="status" id="status"></div>
   <div class="prog"><i id="progBar"></i></div>
@@ -178,16 +333,17 @@ table.recs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
     <div class="toast" id="toast"></div>
     <div class="loading" id="loading"><div class="spin"></div><div id="loadingText">Untangling…</div></div>
   </div>
-  <div class="tools safe-bot">
-    <button class="tool" id="undoBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Undo</button>
-    <button class="tool" id="hintBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Hint</button>
-    <button class="tool" id="gridBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>Grid</button>
-    <button class="tool" id="viewBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit</button>
-    <button class="tool" id="restartBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Restart</button>
+  <div class="tools">
+    <button class="tool" id="undoBtn"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></div>Undo</button>
+    <button class="tool hint" id="hintBtn"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg></div>Hint</button>
+    <button class="tool" id="gridBtn"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 4 7 20M17 4l-2 16M4 9h16M3 15h16"/></svg></div>Grid</button>
+    <button class="tool" id="viewBtn"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></div><span>Fit</span></button>
+    <button class="tool" id="restartBtn"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></div>Restart</button>
   </div>
 </section>
 
 <div class="veil" id="veil"><div class="sheet" id="sheet"></div></div>
+<canvas id="confetti"></canvas>
 
 <script>
 /* Arrow Unwind — puzzle engine (no DOM). Shared by the game and the tests.
@@ -562,8 +718,9 @@ const mq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null
 function isDark() { return settings.theme === 'dark' || (settings.theme === 'auto' && mq && mq.matches); }
 function applyTheme() {
   document.documentElement.dataset.theme = isDark() ? 'dark' : 'light';
-  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = isDark() ? '#12151b' : '#f6f5f1';
+  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = isDark() ? '#10131a' : '#f4f2ec';
   requestDraw();
+  if (typeof curScreen !== 'undefined' && curScreen !== 'game') { if (curScreen === 'home') renderHome(); else if (curScreen === 'pack') renderPack(); else if (curScreen === 'daily') renderDaily(); }
 }
 if (mq && mq.addEventListener) mq.addEventListener('change', applyTheme);
 const COLORS = { ink: ['#1b2540', '#e7eaf0'], black: ['#111111', '#f4f4f4'], blue: ['#1f56d8', '#7ea6ff'], teal: ['#0f766e', '#4fd1c5'], plum: ['#7b2d8b', '#d59ee6'], rainbow: null };
@@ -597,35 +754,65 @@ const sfx = {
 };
 function buzz(p) { if (settings.haptics && navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} }
 
-/* ======================= puzzle catalogue ======================= */
-const MODE_HELP = {
-  relax: 'Unlimited hints and undo. No timer, no hearts, no pressure.',
-  classic: 'Three hearts. Tapping an arrow that is blocked costs a heart.',
-  challenge: 'Timed, with moves counted and personal bests kept.',
-  endless: 'A new puzzle after every clear, getting harder as you go.',
+/* ======================= puzzle catalogue: packs, levels, dailies ======================= */
+const PACKS = [
+  { id: 'classic', name: 'Classic', blurb: 'Square and tall boards packed edge to edge', type: '2d', shapes: ['square', 'rectangle'], color: '#2f6df6', wide: true },
+  { id: 'shapes', name: 'Shapes', blurb: 'Hearts, stars, animals and more', type: '2d', shapes: ['heart', 'star', 'circle', 'butterfly', 'cat', 'flower', 'mushroom', 'fish', 'triangle', 'diamond', 'turtle', 'ring', 'cross', 'wave'], color: '#ec4f7a' },
+  { id: 'cube', name: 'Cube', blurb: 'Arrows wrap all six faces', type: '3d', shapes: ['cube'], color: '#7c5cff' },
+  { id: 'maze', name: 'Mega Maze', blurb: 'Tall, sprawling labyrinths', type: '2d', shapes: ['maze'], color: '#0fa58f' },
+  { id: 'prism', name: 'Prisms', blurb: 'Towers, slabs, bars and bricks', type: '3d', shapes: ['tower', 'slab', 'bar', 'brick'], color: '#f08c00' },
+];
+const PACK = Object.fromEntries(PACKS.map(p => [p.id, p]));
+function packOf(spec) { // older saves had no pack: work it out from the board
+  if (spec.pack && PACK[spec.pack]) return PACK[spec.pack];
+  if (spec.type === '3d') return spec.shape === 'cube' ? PACK.cube : PACK.prism;
+  return spec.shape === 'maze' ? PACK.maze : (spec.shape === 'square' || spec.shape === 'rectangle') ? PACK.classic : PACK.shapes;
+}
+const MODES = {
+  relax: { name: 'Relax', help: 'Unlimited hints and undo. No timer, no hearts, no pressure.', icon: '<path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19l7-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' },
+  classic: { name: 'Classic', help: 'Three hearts. Tapping a blocked arrow costs one. Earn up to three stars.', icon: '<path d="M12 20s-7-4.3-8.9-8.8C1.7 7.9 3.8 4.5 7.1 4.5c2 0 3.4 1.1 4.9 2.9 1.5-1.8 2.9-2.9 4.9-2.9 3.3 0 5.4 3.4 4 6.7C19 15.7 12 20 12 20z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>' },
+  challenge: { name: 'Challenge', help: 'Beat the clock. Moves are counted and personal bests kept.', icon: '<circle cx="12" cy="13.5" r="7" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 10v4l2.5 2M10 3h4M18.5 6.5l1.5-1.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>' },
+  endless: { name: 'Endless', help: 'One puzzle after another, harder every three. How far can you go?', icon: '<path d="M7.5 15.5c-2 0-3.5-1.6-3.5-3.5S5.5 8.5 7.5 8.5c3.5 0 5.5 7 9 7 2 0 3.5-1.6 3.5-3.5S18.5 8.5 16.5 8.5c-3.5 0-5.5 7-9 7z" fill="none" stroke="currentColor" stroke-width="2.2"/>' },
 };
+const MODE_HELP = Object.fromEntries(Object.entries(MODES).map(([k, v]) => [k, v.help]));
 const DAILY_DIFF = ['expert', 'medium', 'hard', 'expert', 'hard', 'extreme', 'nightmare']; // Sun..Sat
-function levelSpec(type, diff, n) {
-  // 3D: the first levels are plain cubes; prisms of other proportions join in after that
-  const shape = type === '2d' ? E.SHAPES_2D[(n - 1) % E.SHAPES_2D.length] : E.SOLIDS[n <= 3 ? 0 : (n - 3) % E.SOLIDS.length][0];
-  return { type, diff, shape, seed: E.hashStr(`level|${type}|${diff}|${n}`), n };
+const DAILIES = [
+  { kind: 'shape', name: 'Shape of the day', pack: 'shapes', mode: 'classic', note: 'Three hearts' },
+  { kind: 'cube', name: 'Cube of the day', pack: 'cube', mode: 'classic', note: 'Three hearts' },
+  { kind: 'rush', name: 'Daily rush', pack: 'maze', mode: 'challenge', note: 'Against the clock' },
+];
+function levelSpec(packId, diff, n) {
+  const pk = PACK[packId];
+  return { pack: pk.id, type: pk.type, diff, shape: pk.shapes[(n - 1) % pk.shapes.length], seed: E.hashStr(`level|${pk.id}|${diff}|${n}`), n };
 }
-function today() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-function dailySpec(type, date) {
-  const seed = E.hashStr(`daily|${type}|${date}`); const day = new Date(date + 'T12:00:00').getDay();
-  const shapes = type === '2d' ? E.SHAPES_2D.filter(s => s !== 'maze') : E.SOLIDS.map(s => s[0]);
-  return { type, diff: DAILY_DIFF[day], shape: shapes[seed % shapes.length], seed, date };
+const dateKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function today() { return dateKey(new Date()); }
+function dailySpec(kind, date) {
+  const D = DAILIES.find(d => d.kind === kind) || DAILIES[0], pk = PACK[D.pack];
+  const seed = E.hashStr(`daily|${kind}|${date}`), day = new Date(date + 'T12:00:00').getDay();
+  let diff = DAILY_DIFF[day]; if (kind === 'rush' && E.DIFFS.indexOf(diff) > 3) diff = 'expert';
+  return { pack: pk.id, type: pk.type, diff, shape: pk.shapes[seed % pk.shapes.length], seed, date, daily: kind };
 }
-function endlessSpec(type, startDiff, n) {
+function endlessSpec(packId, startDiff, n) {
+  const pk = PACK[packId] || PACK.classic;
   const step = Math.min(E.DIFFS.length - 1, E.DIFFS.indexOf(startDiff) + Math.floor((n - 1) / 3));
-  const seed = E.hashStr(`endless|${type}|${startDiff}|${n}|${progress.endlessSalt || 0}`);
-  const shapes = type === '2d' ? E.SHAPES_2D : E.SOLIDS.map(s => s[0]);
-  return { type, diff: E.DIFFS[step], shape: shapes[seed % shapes.length], seed, n };
+  const seed = E.hashStr(`endless|${pk.id}|${startDiff}|${n}|${progress.endlessSalt || 0}`);
+  return { pack: pk.id, type: pk.type, diff: E.DIFFS[step], shape: pk.shapes[seed % pk.shapes.length], seed, n };
 }
 const shapeName = spec => spec.type === '2d' ? E.SHAPE_NAMES[spec.shape] : (E.SOLIDS.find(s => s[0] === spec.shape) || [0, 'Cube'])[1];
-const levelKey = (type, diff) => type + '-' + diff;
-const clearedSet = (type, diff) => progress.cleared[levelKey(type, diff)] || {};
-function highestCleared(type, diff) { let h = 0; for (const k in clearedSet(type, diff)) h = Math.max(h, +k); return h; }
+const levelKey = (packId, diff) => packId + '-' + diff;
+const clearedSet = (packId, diff) => progress.cleared[levelKey(packId, diff)] || {};
+function highestCleared(packId, diff) { let h = 0; for (const k in clearedSet(packId, diff)) h = Math.max(h, +k); return h; }
+const levelId = (packId, diff, n) => `L:${packId}:${diff}:${n}`;
+const starsFor = id => (progress.stars && progress.stars[id]) || 0;
+function packStars(packId) { let s = 0; for (const k in progress.stars || {}) if (k.startsWith('L:' + packId + ':')) s += progress.stars[k]; return s; }
+function packCleared(packId) { let n = 0; for (const d of E.DIFFS) n += Object.keys(clearedSet(packId, d)).length; return n; }
+function totalStars() { let s = 0; for (const k in progress.stars || {}) s += progress.stars[k]; return s; }
+// older saves: daily keys were per 2D/3D, and preferences had a puzzle type instead of a pack
+for (const k of Object.keys(progress.daily)) { const m = k.match(/^(.*):(2d|3d)$/); if (m) { progress.daily[m[1] + ':' + (m[2] === '2d' ? 'shape' : 'cube')] = 1; delete progress.daily[k]; } }
+progress.stars = progress.stars || {};
+if (!prefs.pack || !PACK[prefs.pack]) prefs.pack = prefs.type === '3d' ? 'cube' : 'classic';
+function streakNow() { const y = new Date(); y.setDate(y.getDate() - 1); return stats.lastDaily === today() || stats.lastDaily === dateKey(y) ? stats.streak : 0; }
 
 /* ======================= puzzle generation (worker when possible) ======================= */
 let worker = null, workerFailed = false, jobId = 0; const jobs = new Map();
@@ -686,9 +873,10 @@ function geometry(P) {
   });
 }
 
-function newGame(spec, kind, mode, restore) {
+function newGame(spec, kind, mode, restore, from) {
   const token = {};
-  G = { spec, kind, mode, P: null, token, loading: true };
+  G = { spec, kind, mode, P: null, token, loading: true, from: from || (curScreen === 'game' ? 'home' : curScreen) };
+  $('#game').style.setProperty('--pack', packOf(spec).color); $('#veil').style.setProperty('--pack', packOf(spec).color);
   showScreen('game'); setLoading(true, spec.diff === 'impossible' || spec.diff === 'nightmare' ? 'Untangling hundreds of arrows…' : 'Untangling…');
   updateHud();
   generate(spec).then(P => {
@@ -756,57 +944,80 @@ function hint() {
 function restart() {
   if (!G || !G.P) return;
   const spec = G.spec, kind = G.kind, mode = G.mode, en = G.endlessN, sd = G.startDiff;
-  newGame(spec, kind, mode, { history: [], endlessN: en, startDiff: sd, hearts: 3 });
+  newGame(spec, kind, mode, { history: [], endlessN: en, startDiff: sd, hearts: 3 }, G.from);
 }
 
 /* ======================= win / fail ======================= */
 function fmt(ms) { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
-function puzzleId() { const s = G.spec; return G.kind === 'level' ? `L:${s.type}:${s.diff}:${s.n}` : G.kind === 'daily' ? `D:${s.type}:${s.date}` : `E:${s.type}:${s.seed}`; }
+function puzzleId() { const s = G.spec, pk = packOf(s).id; return G.kind === 'level' ? levelId(pk, s.diff, s.n) : G.kind === 'daily' ? `D:${s.daily || pk}:${s.date}` : `E:${pk}:${s.seed}`; }
+const STAR = (on, cls) => `<svg class="${cls || ''}" viewBox="0 0 24 24"><path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.4 1.1 6.2L12 17l-5.6 3 1.1-6.2L2.9 9.4l6.3-.9z" fill="${on ? 'var(--gold)' : 'var(--soft)'}" stroke="${on ? '#d99a00' : 'var(--line)'}" stroke-width="1" stroke-linejoin="round"/></svg>`;
+function earnedStars() { return G.mistakes === 0 && G.hints === 0 ? 3 : G.mistakes <= 2 && G.hints <= 1 ? 2 : 1; }
 function win() {
-  const s = G.spec; sfx.win(); buzz([10, 40, 10, 40, 30]);
-  stats.solved++; stats.byKey[s.type + '-' + s.diff] = (stats.byKey[s.type + '-' + s.diff] || 0) + 1;
+  const s = G.spec, pk = packOf(s); sfx.win(); buzz([10, 40, 10, 40, 30]);
+  stats.solved++; stats.byKey[pk.id + '-' + s.diff] = (stats.byKey[pk.id + '-' + s.diff] || 0) + 1;
   if (!G.mistakes && !G.hints) stats.perfect++;
-  if (G.kind === 'level') { const k = levelKey(s.type, s.diff); progress.cleared[k] = progress.cleared[k] || {}; progress.cleared[k][s.n] = 1; }
+  const stars = earnedStars(), id = puzzleId(), before = starsFor(id);
+  if (G.kind !== 'endless') progress.stars[id] = Math.max(before, stars);
+  if (G.kind === 'level') { const k = levelKey(pk.id, s.diff); progress.cleared[k] = progress.cleared[k] || {}; progress.cleared[k][s.n] = 1; }
   if (G.kind === 'daily') {
-    if (!progress.daily[s.date + ':' + s.type]) {
+    if (stats.lastDaily !== s.date && s.date === today()) {
       const y = new Date(s.date + 'T12:00:00'); y.setDate(y.getDate() - 1);
-      const yk = y.getFullYear() + '-' + String(y.getMonth() + 1).padStart(2, '0') + '-' + String(y.getDate()).padStart(2, '0');
-      if (stats.lastDaily !== s.date) { stats.streak = stats.lastDaily === yk ? stats.streak + 1 : 1; stats.lastDaily = s.date; }
+      stats.streak = stats.lastDaily === dateKey(y) ? stats.streak + 1 : 1; stats.lastDaily = s.date;
     }
-    progress.daily[s.date + ':' + s.type] = 1;
+    progress.daily[s.date + ':' + (s.daily || 'shape')] = 1;
   }
   let record = '';
-  if (G.mode === 'challenge' || G.kind !== 'endless') {
-    const id = puzzleId(), prev = progress.best[id];
-    const cur = { t: Math.round(G.elapsed), m: G.moves };
-    if (!prev || cur.t < prev.t) { record = prev ? 'New best time!' : ''; progress.best[id] = Object.assign({}, prev, { t: cur.t }); }
+  if (G.kind !== 'endless') {
+    const prev = progress.best[id], cur = { t: Math.round(G.elapsed), m: G.moves };
+    if (!prev || prev.t === undefined || cur.t < prev.t) { if (prev && prev.t !== undefined) record = 'New best time!'; progress.best[id] = Object.assign({}, prev, { t: cur.t }); }
     if (!prev || prev.m === undefined || cur.m < prev.m) { progress.best[id] = Object.assign(progress.best[id] || {}, { m: cur.m }); if (prev && prev.m !== undefined) record = record || 'Fewest moves yet!'; }
   }
-  if (G.kind === 'endless') { const k = s.type + '-' + G.startDiff; progress.endlessBest[k] = Math.max(progress.endlessBest[k] || 0, G.endlessN); }
+  if (G.kind === 'endless') { const k = pk.id + '-' + G.startDiff; progress.endlessBest[k] = Math.max(progress.endlessBest[k] || 0, G.endlessN); }
   saveProgress(); saveStats(); LS.del('game');
-  const best = progress.best[puzzleId()];
+  confetti(pk.color);
+  const best = progress.best[id];
   const grid = `<div class="statgrid"><div class="stat"><b>${fmt(G.elapsed)}</b><span>Time${best && best.t !== undefined ? ' · best ' + fmt(best.t) : ''}</span></div>
     <div class="stat"><b>${G.moves}</b><span>Moves${best && best.m !== undefined ? ' · best ' + best.m : ''}</span></div>
-    <div class="stat"><b>${G.P.arrows.length}</b><span>Arrows cleared</span></div>
-    <div class="stat"><b>${G.mistakes} / ${G.hints}</b><span>Blocked taps / hints</span></div></div>`;
+    <div class="stat"><b>${G.P.arrows.length}</b><span>Arrows unwound</span></div>
+    <div class="stat"><b>${G.mistakes} · ${G.hints}</b><span>Blocked taps · hints</span></div></div>`;
+  const starRow = `<div class="stars">${[0, 1, 2].map(k => `<span class="s">${STAR(k < stars)}</span>`).join('')}</div>`;
+  const why = stars === 3 ? 'Flawless: no blocked taps, no hints.' : stars === 2 ? 'Three stars for no blocked taps and no hints.' : 'Fewer blocked taps and hints earn more stars.';
   if (G.kind === 'endless') {
-    sheet(`<h2>Cleared #${G.endlessN}</h2><p>${E.DIFF_NAMES[s.diff]} · ${shapeName(s)}. Next puzzle in a moment…</p>${grid}
-      <div class="row"><button class="big ghost" data-act="menu">Stop</button><button class="big" data-act="next">Next now</button></div>`);
+    sheet(`<h2 class="pop">Cleared #${G.endlessN}</h2>${starRow}<p>${E.DIFF_NAMES[s.diff]} · ${shapeName(s)}. Next puzzle in a moment…</p>${grid}
+      <div class="row"><button class="big ghost" data-act="menu">Stop</button><button class="big packc" data-act="next">Next now</button></div>`);
     G.autoNext = setTimeout(() => { if (veilOpen()) act('next'); }, 2600);
     return;
   }
-  const hasNext = G.kind === 'level';
-  sheet(`<h2>${G.mistakes === 0 && G.hints === 0 ? 'Flawless!' : 'Unwound!'}</h2><p>${E.DIFF_NAMES[s.diff]} · ${shapeName(s)}${record ? ' · <b style="color:var(--good)">' + record + '</b>' : ''}</p>${grid}
-    <div class="row"><button class="big ghost" data-act="menu">Menu</button>${hasNext ? '<button class="big" data-act="next">Next level</button>' : '<button class="big" data-act="replay">Play again</button>'}</div>`);
+  const title = G.kind === 'daily' ? 'Daily done!' : stars === 3 ? 'Perfect!' : stars === 2 ? 'Great!' : 'Unwound!';
+  const next = G.kind === 'level' ? '<button class="big packc" data-act="next">Next level</button>' : '<button class="big packc" data-act="menu">Done</button>';
+  sheet(`<h2 class="pop">${title}</h2>${starRow}<p>${why}${record ? '<br><b style="color:var(--good)">' + record + '</b>' : ''}</p>${grid}
+    <div class="row"><button class="big ghost" data-act="replay">Replay</button>${next}</div><button class="big ghost" data-act="menu" style="margin-top:10px">Menu</button>`);
 }
 function fail(title, text) {
-  LS.del('game');
-  sheet(`<h2>${title}</h2><p>${text}</p><div class="row"><button class="big ghost" data-act="menu">Menu</button><button class="big" data-act="replay">Try again</button></div>`);
+  LS.del('game'); buzz([40, 60, 40]);
+  sheet(`<h2 class="pop">${title}</h2><p>${text}</p><div class="row"><button class="big ghost" data-act="menu">Menu</button><button class="big packc" data-act="replay">Try again</button></div>`);
 }
 function nextPuzzle() {
-  const s = G.spec;
-  if (G.kind === 'level') return newGame(levelSpec(s.type, s.diff, s.n + 1), 'level', G.mode);
-  if (G.kind === 'endless') { const n = G.endlessN + 1; return newGame(endlessSpec(s.type, G.startDiff, n), 'endless', G.mode, { history: [], endlessN: n, startDiff: G.startDiff, hearts: 3 }); }
+  const s = G.spec, pk = packOf(s);
+  if (G.kind === 'level') return newGame(levelSpec(pk.id, s.diff, s.n + 1), 'level', G.mode, null, G.from);
+  if (G.kind === 'endless') { const n = G.endlessN + 1; return newGame(endlessSpec(pk.id, G.startDiff, n), 'endless', G.mode, { history: [], endlessN: n, startDiff: G.startDiff, hearts: 3 }, G.from); }
+}
+// a short burst of little arrows when a puzzle is cleared
+function confetti(color) {
+  const c = $('#confetti'), x = c.getContext('2d'), W = innerWidth, H = innerHeight, d = Math.min(2, devicePixelRatio || 1);
+  c.width = W * d; c.height = H * d; x.setTransform(d, 0, 0, d, 0, 0);
+  const cols = [color, '#f5b301', '#ff6a2b', '#18a06a', '#2f6df6', '#ec4f7a'];
+  const ps = Array.from({ length: 70 }, () => ({ x: W / 2, y: H * 0.42, vx: (Math.random() - 0.5) * 12, vy: -Math.random() * 13 - 4, a: Math.random() * 6.28, va: (Math.random() - 0.5) * 0.3, c: cols[(Math.random() * cols.length) | 0], s: 6 + Math.random() * 6 }));
+  const t0 = performance.now();
+  (function step(now) {
+    const t = (now - t0) / 1000; x.clearRect(0, 0, W, H);
+    for (const p of ps) {
+      p.vy += 0.42; p.x += p.vx; p.y += p.vy; p.a += p.va; x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.globalAlpha = Math.max(0, 1 - t / 1.8);
+      x.strokeStyle = p.c; x.fillStyle = p.c; x.lineWidth = 2.4; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(-p.s, 0); x.lineTo(p.s * 0.4, 0); x.stroke(); x.beginPath(); x.moveTo(p.s, 0); x.lineTo(p.s * 0.2, -p.s * 0.45); x.lineTo(p.s * 0.2, p.s * 0.45); x.fill(); x.restore();
+    }
+    if (t < 1.8) requestAnimationFrame(step); else x.clearRect(0, 0, W, H);
+  })(t0);
 }
 
 /* ======================= autosave ======================= */
@@ -1091,13 +1302,13 @@ function bringIntoView(i) {
 /* ======================= HUD ======================= */
 const HEART = c => `<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.9 8 3.1 4 7 4c2.2 0 3.6 1.2 5 3 1.4-1.8 2.8-3 5-3 3.9 0 6.1 4 4.6 7.6C19.5 16.4 12 21 12 21z" fill="${c}"/></svg>`;
 function updateHud() {
-  if (!G) return; const s = G.spec;
-  $('#gTitle').textContent = G.kind === 'level' ? `Level ${s.n}` : G.kind === 'daily' ? `Daily ${s.type === '3d' ? '3D' : '2D'}` : `Endless #${G.endlessN || 1}`;
-  $('#gSub').textContent = `${E.DIFF_NAMES[s.diff]} · ${shapeName(s)} · ${({ relax: 'Relax', classic: 'Classic', challenge: 'Challenge', endless: 'Endless' })[G.mode]}`;
+  if (!G) return; const s = G.spec, pk = packOf(s);
+  $('#gTitle').textContent = G.kind === 'level' ? `${pk.name} · Level ${s.n}` : G.kind === 'daily' ? (DAILIES.find(d => d.kind === s.daily) || DAILIES[0]).name : `Endless #${G.endlessN || 1}`;
+  $('#gSub').textContent = `${E.DIFF_NAMES[s.diff]} · ${shapeName(s)} · ${MODES[G.mode] ? MODES[G.mode].name : ''}`;
   if (!G.P) { $('#status').innerHTML = ''; $('#progBar').style.width = '0'; return; }
-  const n = G.P.arrows.length, left = remaining(), bits = [`<span>${left} / ${n} arrows</span>`];
+  const n = G.P.arrows.length, left = remaining(), bits = [`<span class="chipi">${left} / ${n} arrows</span>`];
   if (G.mode === 'classic') bits.unshift(`<span class="hearts">${[0, 1, 2].map(k => HEART(k < G.hearts ? 'var(--bad)' : 'var(--line)')).join('')}</span>`);
-  if (G.mode === 'challenge') { bits.push(`<span>${G.timeLimit ? '⏱ ' + fmt(G.timeLimit * 1000 - G.elapsed) : '⏱ ' + fmt(G.elapsed)}</span>`, `<span>${G.moves} moves</span>`); }
+  if (G.mode === 'challenge') bits.push(`<span class="chipi">⏱ ${G.timeLimit ? fmt(G.timeLimit * 1000 - G.elapsed) : fmt(G.elapsed)}</span>`, `<span class="chipi">${G.moves} moves</span>`);
   $('#status').innerHTML = bits.join('');
   $('#progBar').style.width = ((n - left) / n * 100) + '%';
   $('#undoBtn').disabled = !G.history.length || G.done;
@@ -1117,7 +1328,7 @@ sheetEl.addEventListener('click', e => { const b = e.target.closest('[data-act]'
 function act(a, el) {
   if (G && G.autoNext) { clearTimeout(G.autoNext); G.autoNext = null; }
   if (a === 'resume' || a === 'close') return closeSheet();
-  if (a === 'menu') { veil.classList.remove('on'); autosave(); G = null; showScreen('home'); return; }
+  if (a === 'menu') { veil.classList.remove('on'); const to = (G && G.from) || 'home'; autosave(); G = null; showScreen(to); return; }
   if (a === 'replay') { veil.classList.remove('on'); restart(); return; }
   if (a === 'restart') { veil.classList.remove('on'); restart(); return; }
   if (a === 'next') { veil.classList.remove('on'); nextPuzzle(); return; }
@@ -1150,60 +1361,218 @@ function openSettings() {
     <p class="small" style="margin-top:12px">Everything is saved on this device only. No accounts, no ads.</p>`);
 }
 function openStats() {
-  const rows = []; for (const t of ['2d', '3d']) for (const d of E.DIFFS) { const n = stats.byKey[t + '-' + d] || 0; if (n) rows.push(`<tr><td>${t.toUpperCase()} · ${E.DIFF_NAMES[d]}</td><td>${n}</td></tr>`); }
+  const rows = []; for (const p of PACKS) { let n = 0; for (const d of E.DIFFS) n += stats.byKey[p.id + '-' + d] || 0; if (n) rows.push(`<tr><td>${p.name}</td><td>${n} solved · ${packStars(p.id)} ★</td></tr>`); }
   const bests = Object.entries(progress.best).filter(([, v]) => v.t !== undefined).sort((a, b) => b[1].t - a[1].t).slice(0, 8)
-    .map(([k, v]) => { const p = k.split(':'); return `<tr><td>${p[0] === 'L' ? `Level ${p[3]} · ${p[1].toUpperCase()} ${E.DIFF_NAMES[p[2]]}` : p[0] === 'D' ? `Daily ${p[1].toUpperCase()} ${p[2]}` : 'Endless'}</td><td>${fmt(v.t)}${v.m !== undefined ? ' · ' + v.m + ' moves' : ''}</td></tr>`; }).join('');
+    .map(([k, v]) => { const p = k.split(':'); return `<tr><td>${p[0] === 'L' ? `${(PACK[p[1]] || { name: p[1].toUpperCase() }).name} ${E.DIFF_NAMES[p[2]] || ''} · ${p[3]}` : p[0] === 'D' ? `Daily ${p[2]}` : 'Endless'}</td><td>${fmt(v.t)}${v.m !== undefined ? ' · ' + v.m + ' moves' : ''}</td></tr>`; }).join('');
   sheet(`<h2>Statistics</h2>
     <div class="statgrid"><div class="stat"><b>${stats.solved}</b><span>Puzzles solved</span></div><div class="stat"><b>${stats.arrows}</b><span>Arrows unwound</span></div>
-    <div class="stat"><b>${stats.perfect}</b><span>Flawless clears</span></div><div class="stat"><b>${stats.streak}</b><span>Daily streak</span></div>
-    <div class="stat"><b>${stats.mistakes}</b><span>Blocked taps</span></div><div class="stat"><b>${stats.hints}</b><span>Hints used</span></div>
+    <div class="stat"><b>${totalStars()} ★</b><span>Stars earned</span></div><div class="stat"><b>${streakNow()}</b><span>Daily streak</span></div>
+    <div class="stat"><b>${stats.perfect}</b><span>Flawless clears</span></div><div class="stat"><b>${stats.mistakes}</b><span>Blocked taps</span></div><div class="stat"><b>${stats.hints}</b><span>Hints used</span></div>
     <div class="stat"><b>${fmt(stats.ms)}</b><span>Time played</span></div><div class="stat"><b>${Math.max(0, ...Object.values(progress.endlessBest))}</b><span>Longest endless run</span></div></div>
-    ${rows.length ? `<div class="label">Solved by difficulty</div><table class="recs">${rows.join('')}</table>` : ''}
+    ${rows.length ? `<div class="label">By puzzle type</div><table class="recs">${rows.join('')}</table>` : ''}
     ${bests ? `<div class="label" style="margin-top:14px">Personal bests</div><table class="recs">${bests}</table>` : ''}
     <button class="big" style="margin-top:14px" data-act="close">Close</button>`);
 }
 
-/* ======================= home screen ======================= */
+/* ======================= menu screens ======================= */
+let curScreen = 'home';
 function showScreen(id) {
+  curScreen = id;
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  $('#tabs').style.display = id === 'game' || id === 'pack' ? 'none' : '';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === id));
   if (id === 'game') requestAnimationFrame(() => { resize(); fitView(); });
   if (id === 'home') renderHome();
+  if (id === 'pack') renderPack();
+  if (id === 'daily') renderDaily();
+  bgfx.run(id === 'home');
 }
-let levelPages = 1;
+
+/* ---- little preview pictures of puzzles (drawn once, cached) ---- */
+const pvCache = new Map();
+function previewPuzzle(spec) {
+  const k = JSON.stringify([spec.pack, spec.diff, spec.shape, spec.seed]);
+  if (!pvCache.has(k)) { try { pvCache.set(k, E.makePuzzle(spec)); } catch (e) { pvCache.set(k, null); } }
+  return pvCache.get(k);
+}
+function drawPreview(canvas, spec, opt) {
+  opt = opt || {};
+  const P = previewPuzzle(spec); if (!P) return;
+  const r = canvas.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1), W = r.width, H = r.height; if (!W || !H) return;
+  canvas.width = W * d; canvas.height = H * d; const x = canvas.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); x.clearRect(0, 0, W, H);
+  const geo = geometry(P), ink = isDark() ? '#eef1f6' : '#18213a', s = P.surf;
+  let proj, faceVis = () => true, k;
+  if (s.kind === 'flat') {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const c of s.cells) if (c.on) { x0 = Math.min(x0, c.x); y0 = Math.min(y0, c.y); x1 = Math.max(x1, c.x + 1); y1 = Math.max(y1, c.y + 1); }
+    const pad = opt.pad || 12; k = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0));
+    const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+    proj = p => [ox + p[0] * k, oy + p[1] * k];
+  } else {
+    const [X, Y, Z] = s.dims, c = [X / 2, Y / 2, Z / 2], R = mul(rotM([1, 0, 0], 0.5), rotM([0, 1, 0], -0.66)), diag = Math.hypot(X, Y, Z), cam = diag * 3.2;
+    k = Math.min(W, H) * 0.92 / diag;
+    proj = p => { const a = p[0] - c[0], b = p[1] - c[1], e = p[2] - c[2], qx = R[0] * a + R[1] * b + R[2] * e, qy = R[3] * a + R[4] * b + R[5] * e, qz = R[6] * a + R[7] * b + R[8] * e, f = cam / (cam - qz); return [W / 2 + qx * k * f, H / 2 - qy * k * f]; };
+    const fz = n => { const t = AX[n]; return R[6] * t[0] + R[7] * t[1] + R[8] * t[2]; };
+    faceVis = f => f < 0 || fz(s.faces[f].n) > 0.05;
+    for (const f of s.faces) {
+      const z = fz(f.n); if (z <= 0.05) continue;
+      const ax = f.n >> 1, a1 = (ax + 1) % 3, a2 = (ax + 2) % 3, v = f.n % 2 === 0 ? s.dims[ax] : 0, D = s.dims;
+      const cor = (i, j) => { const p = [0, 0, 0]; p[ax] = v; p[a1] = i; p[a2] = j; return proj(p); };
+      const q = [cor(0, 0), cor(D[a1], 0), cor(D[a1], D[a2]), cor(0, D[a2])], m = 0.86 + 0.14 * z, base = isDark() ? [44, 50, 62] : [255, 254, 251];
+      x.fillStyle = `rgb(${base.map(v => Math.round(v * m)).join(',')})`; x.beginPath(); q.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath(); x.fill();
+      x.strokeStyle = 'rgba(0,0,0,.08)'; x.stroke();
+    }
+  }
+  x.strokeStyle = ink; x.fillStyle = ink; x.lineWidth = Math.max(0.8, Math.min(2.2, k * 0.1)); x.lineCap = 'round'; x.lineJoin = 'round';
+  x.beginPath();
+  for (const g of geo) {
+    let pen = false;
+    for (let i = 0; i < g.pts.length - 1 && g.cum[i] < g.L - 1e-6; i++) {
+      if (!faceVis(g.face[i])) { pen = false; continue; }
+      const a = proj(g.pts[i]), b = proj(g.pts[i + 1]); if (!pen) x.moveTo(a[0], a[1]); x.lineTo(b[0], b[1]); pen = true;
+    }
+  }
+  x.stroke(); x.beginPath();
+  for (const g of geo) { // arrowheads
+    const hi = g.cum.findIndex(c => c >= g.L - 1e-6); if (hi < 0 || !faceVis(g.face[hi])) continue;
+    const h = g.pts[hi], t = AX[P.arrows[g.i].hd], N = AX[g.n], B = [N[1] * t[2] - N[2] * t[1], N[2] * t[0] - N[0] * t[2], N[0] * t[1] - N[1] * t[0]];
+    const tip = proj([h[0] + t[0] * 0.38, h[1] + t[1] * 0.38, h[2] + t[2] * 0.38]), l = proj([h[0] + B[0] * 0.22, h[1] + B[1] * 0.22, h[2] + B[2] * 0.22]), rr = proj([h[0] - B[0] * 0.22, h[1] - B[1] * 0.22, h[2] - B[2] * 0.22]);
+    x.moveTo(tip[0], tip[1]); x.lineTo(l[0], l[1]); x.lineTo(rr[0], rr[1]); x.closePath();
+  }
+  x.fill();
+}
+const previewSpec = (packId, diff, n) => Object.assign(levelSpec(packId, diff || 'hard', n || 1), { seed: E.hashStr('preview|' + packId + '|' + (diff || 'hard') + '|' + (n || 1)) });
+
+/* ---- main menu ---- */
 function renderHome() {
-  const seg = (el, k) => el.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === prefs[k]));
-  seg($('#typeSeg'), 'type'); seg($('#modeSeg'), 'mode');
+  $('#starCount').textContent = totalStars(); $('#streakCount').textContent = streakNow();
+  const sg = LS.get('game', null), pb = $('#playBtn');
+  if (sg) {
+    const pk = packOf(sg.spec); pb.style.setProperty('--pack', pk.color);
+    $('#playTitle').textContent = 'Continue';
+    $('#playSub').textContent = `${sg.kind === 'level' ? pk.name + ' · Level ' + sg.spec.n : sg.kind === 'daily' ? 'Daily challenge' : 'Endless #' + sg.endlessN} · ${E.DIFF_NAMES[sg.spec.diff]} · ${sg.left} arrows left`;
+  } else {
+    const pk = PACK[prefs.pack], n = highestCleared(pk.id, prefs.diff) + 1; pb.style.setProperty('--pack', pk.color);
+    $('#playTitle').textContent = 'Play';
+    $('#playSub').textContent = `${pk.name} · ${E.DIFF_NAMES[prefs.diff]} · Level ${n}`;
+  }
+  const d = today(), done = DAILIES.filter(x => progress.daily[d + ':' + x.kind]).length;
+  $('#dailyBannerSub').textContent = done === DAILIES.length ? 'All done today. Come back tomorrow!' : `${done} of ${DAILIES.length} done · new in ${untilMidnight()}`;
+  $('#dailyDots').innerHTML = DAILIES.map(x => `<i class="${progress.daily[d + ':' + x.kind] ? 'on' : ''}"></i>`).join('');
+  let cl = 0; for (const p of PACKS) cl += packCleared(p.id);
+  $('#packsSub').textContent = `${cl} level${cl === 1 ? '' : 's'} cleared`;
+  const box = $('#packs');
+  box.innerHTML = PACKS.map((p, i) => {
+    const st = packStars(p.id), cleared = packCleared(p.id), goal = Math.max(10, Math.ceil((cleared + 1) / 10) * 10);
+    return `<button class="pack ${p.wide ? 'wide' : ''} rise" style="--pack:${p.color};animation-delay:${i * 60}ms" data-pack="${p.id}">
+      <div class="pv"><canvas></canvas><span class="tag">${p.type === '3d' ? '3D' : '2D'}</span></div>
+      <div class="body"><b>${p.name}</b><span class="sub">${p.blurb}</span>
+      <div class="meter"><div class="bar"><i style="width:${Math.min(100, cleared / goal * 100)}%"></i></div>${STAR(true)}${st}</div></div></button>`;
+  }).join('');
+  box.querySelectorAll('.pack').forEach(b => b.onclick = () => { prefs.pack = b.dataset.pack; savePrefs(); showScreen('pack'); });
+  requestAnimationFrame(() => box.querySelectorAll('.pack').forEach(b => drawPreview(b.querySelector('canvas'), previewSpec(b.dataset.pack, b.dataset.pack === 'maze' ? 'hard' : 'expert'), { pad: 10 })));
+}
+function untilMidnight() { const n = new Date(), m = new Date(n); m.setHours(24, 0, 0, 0); const s = Math.floor((m - n) / 1000); return `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, '0')}m`; }
+$('#playBtn').onclick = () => {
+  const sg = LS.get('game', null);
+  if (sg) return newGame(sg.spec, sg.kind, sg.mode, sg, 'home');
+  const pk = PACK[prefs.pack], mode = prefs.mode === 'endless' ? 'relax' : prefs.mode;
+  newGame(levelSpec(pk.id, prefs.diff, highestCleared(pk.id, prefs.diff) + 1), 'level', mode, null, 'home');
+};
+$('#dailyBanner').onclick = () => showScreen('daily');
+$('#homeSettings').onclick = openSettings;
+
+/* ---- a puzzle type: difficulty, mode, levels ---- */
+function renderPack() {
+  const pk = PACK[prefs.pack], scr = $('#pack'); scr.style.setProperty('--pack', pk.color);
+  $('#packTitle').textContent = pk.name; $('#packStars').textContent = packStars(pk.id); $('#packBlurb').textContent = pk.blurb;
+  $('#diffs').innerHTML = E.DIFFS.map(d => { const n = Object.keys(clearedSet(pk.id, d)).length; return `<button class="dchip ${prefs.diff === d ? 'on' : ''}" data-d="${d}">${E.DIFF_NAMES[d]}<small>${n ? n + ' cleared' : 'new'}</small></button>`; }).join('');
+  $('#modes').innerHTML = Object.entries(MODES).map(([k, m]) => `<button class="mode ${prefs.mode === k ? 'on' : ''}" data-m="${k}"><svg viewBox="0 0 24 24">${m.icon}</svg>${m.name}</button>`).join('');
   $('#modeHelp').textContent = MODE_HELP[prefs.mode];
-  $('#diffChips').innerHTML = E.DIFFS.map(d => { const n = Object.keys(clearedSet(prefs.type, d)).length; return `<button class="chip ${prefs.diff === d ? 'on' : ''}" data-d="${d}">${E.DIFF_NAMES[d]}${n ? `<small>${n}</small>` : ''}</button>`; }).join('');
   const la = $('#levelArea');
   if (prefs.mode === 'endless') {
-    const b = progress.endlessBest[prefs.type + '-' + prefs.diff] || 0;
-    la.innerHTML = `<button class="big" id="endlessGo">Start endless from ${E.DIFF_NAMES[prefs.diff]}</button><div class="small" style="margin-top:8px">Gets harder every three puzzles.${b ? ' Your longest run here: ' + b + '.' : ''}</div>`;
-    $('#endlessGo').onclick = () => { progress.endlessSalt = (progress.endlessSalt || 0) + 1; saveProgress(); newGame(endlessSpec(prefs.type, prefs.diff, 1), 'endless', 'endless', { history: [], endlessN: 1, startDiff: prefs.diff, hearts: 3 }); };
+    const b = progress.endlessBest[pk.id + '-' + prefs.diff] || 0;
+    la.innerHTML = `<button class="endless btn3d" id="endlessGo"><svg viewBox="0 0 24 24" style="color:#fff">${MODES.endless.icon}</svg><div><b>Start endless</b><small>From ${E.DIFF_NAMES[prefs.diff]}${b ? ' · best run ' + b : ''}</small></div></button>`;
+    $('#endlessGo').onclick = () => { progress.endlessSalt = (progress.endlessSalt || 0) + 1; saveProgress(); newGame(endlessSpec(pk.id, prefs.diff, 1), 'endless', 'endless', { history: [], endlessN: 1, startDiff: prefs.diff, hearts: 3 }, 'pack'); };
   } else {
-    const hi = highestCleared(prefs.type, prefs.diff), done = clearedSet(prefs.type, prefs.diff), shown = Math.max(18, Math.ceil((hi + 2) / 6) * 6) * levelPages;
-    let html = `<div class="lvhead"><div class="label" style="margin:0">Levels</div><span>${Object.keys(done).length} cleared</span></div><div class="levels">`;
-    for (let n = 1; n <= shown; n++) html += `<button class="lv ${done[n] ? 'done' : ''}" data-n="${n}" ${n > hi + 1 ? 'disabled' : ''}>${n}</button>`;
-    html += `</div><button class="more" id="moreLv">Show more levels</button>`;
-    la.innerHTML = html;
-    la.querySelectorAll('.lv').forEach(b => b.onclick = () => newGame(levelSpec(prefs.type, prefs.diff, +b.dataset.n), 'level', prefs.mode));
-    $('#moreLv').onclick = () => { levelPages++; renderHome(); };
+    const hi = highestCleared(pk.id, prefs.diff), done = clearedSet(pk.id, prefs.diff), shown = Math.max(12, Math.ceil((hi + 9) / 4) * 4);
+    let html = '<div class="levels">';
+    for (let n = 1; n <= shown; n++) {
+      const st = starsFor(levelId(pk.id, prefs.diff, n)), locked = n > hi + 1;
+      html += `<button class="lv ${done[n] ? 'done' : ''} ${n === hi + 1 ? 'next' : ''}" data-n="${n}" ${locked ? 'disabled' : ''}>${locked ? '<svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>' : n}
+        ${done[n] ? `<span class="st">${[0, 1, 2].map(k => STAR(k < st)).join('')}</span>` : ''}</button>`;
+    }
+    la.innerHTML = html + '</div>';
+    la.querySelectorAll('.lv').forEach(b => b.onclick = () => newGame(levelSpec(pk.id, prefs.diff, +b.dataset.n), 'level', prefs.mode, null, 'pack'));
   }
-  const d = today(); const D = t => { const sp = dailySpec(t, d), ok = progress.daily[d + ':' + t]; return `<button data-t="${t}">${ok ? '<span class="ok">✓</span>' : ''}<b>${t === '2d' ? '2D' : '3D'} · ${shapeName(sp)}</b><span>${E.DIFF_NAMES[sp.diff]} · ${d}</span></button>`; };
-  $('#dailyBox').innerHTML = D('2d') + D('3d');
-  $('#dailyBox').querySelectorAll('button').forEach(b => b.onclick = () => newGame(dailySpec(b.dataset.t, d), 'daily', prefs.mode === 'endless' ? 'relax' : prefs.mode));
-  const sg = LS.get('game', null);
-  $('#continueCard').classList.toggle('on', !!sg);
-  if (sg) $('#continueInfo').textContent = `${sg.kind === 'level' ? 'Level ' + sg.spec.n : sg.kind === 'daily' ? 'Daily ' + sg.spec.date : 'Endless #' + sg.endlessN} · ${sg.spec.type.toUpperCase()} ${E.DIFF_NAMES[sg.spec.diff]} · ${sg.left} of ${sg.total} arrows left`;
+  requestAnimationFrame(() => drawPreview($('#packHero'), previewSpec(pk.id, prefs.diff === 'easy' ? 'medium' : prefs.diff === 'impossible' || prefs.diff === 'nightmare' ? 'extreme' : prefs.diff, 2), { pad: 16 }));
 }
-$('#typeSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.type = b.dataset.v; levelPages = 1; savePrefs(); renderHome(); } };
-$('#modeSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.mode = b.dataset.v; savePrefs(); renderHome(); } };
-$('#diffChips').onclick = e => { const b = e.target.closest('.chip'); if (b) { prefs.diff = b.dataset.d; levelPages = 1; savePrefs(); renderHome(); } };
-$('#continueBtn').onclick = () => { const sg = LS.get('game', null); if (sg) newGame(sg.spec, sg.kind, sg.mode, sg); };
-$('#openSettings').onclick = openSettings; $('#openStats').onclick = openStats;
+$('#diffs').onclick = e => { const b = e.target.closest('.dchip'); if (b) { prefs.diff = b.dataset.d; savePrefs(); renderPack(); } };
+$('#modes').onclick = e => { const b = e.target.closest('.mode'); if (b) { prefs.mode = b.dataset.m; savePrefs(); renderPack(); } };
+$('#packBack').onclick = () => showScreen('home');
+
+/* ---- daily challenges ---- */
+let dailyTimer = null;
+function renderDaily() {
+  const d = today(), st = streakNow();
+  $('#streakBig').textContent = st;
+  $('#streakTxt').textContent = st ? 'Finish any daily challenge each day to keep it going.' : 'Finish a daily challenge to start a streak.';
+  const days = []; for (let k = 6; k >= 0; k--) { const t = new Date(); t.setDate(t.getDate() - k); days.push(t); }
+  $('#week').innerHTML = days.map(t => {
+    const key = dateKey(t), n = DAILIES.filter(x => progress.daily[key + ':' + x.kind]).length;
+    return `<div class="day ${n === DAILIES.length ? 'done' : n ? 'part' : ''} ${key === d ? 'today' : ''}">${'SMTWTFS'[t.getDay()]}<i>${n === DAILIES.length ? '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : t.getDate()}</i></div>`;
+  }).join('');
+  $('#dailyCards').innerHTML = DAILIES.map((x, i) => {
+    const sp = dailySpec(x.kind, d), pk = PACK[x.pack], ok = progress.daily[d + ':' + x.kind], st = starsFor(`D:${x.kind}:${d}`);
+    return `<button class="dcard rise ${ok ? 'done' : ''}" style="--pack:${pk.color};animation-delay:${i * 70}ms" data-k="${x.kind}"><div class="pv"><canvas></canvas></div>
+      <div class="body"><div class="k">${pk.name} · ${E.DIFF_NAMES[sp.diff]}</div><b>${x.name}</b><div class="sub">${shapeName(sp)} · ${x.note}</div>
+      <span class="go">${ok ? `${[0, 1, 2].map(k => k < st ? '★' : '☆').join('')} Done · play again` : 'Play ▸'}</span></div></button>`;
+  }).join('');
+  $('#dailyCards').querySelectorAll('.dcard').forEach(b => b.onclick = () => { const x = DAILIES.find(q => q.kind === b.dataset.k); newGame(dailySpec(x.kind, d), 'daily', x.mode, null, 'daily'); });
+  requestAnimationFrame(() => $('#dailyCards').querySelectorAll('.dcard').forEach(b => { const sp = dailySpec(b.dataset.k, d); drawPreview(b.querySelector('canvas'), Object.assign({}, sp, { diff: sp.type === '3d' ? 'medium' : 'hard' }), { pad: 10 }); }));
+  const tick = () => { if (curScreen !== 'daily') { clearInterval(dailyTimer); dailyTimer = null; return; } const n = new Date(), m = new Date(n); m.setHours(24, 0, 0, 0); const s = Math.floor((m - n) / 1000); $('#countdown').textContent = `New challenges in ${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+  tick(); if (!dailyTimer) dailyTimer = setInterval(tick, 1000);
+}
+$('#dailyBack').onclick = () => showScreen('home');
+$('#tabs').onclick = e => { const t = e.target.closest('.tab'); if (!t) return; const v = t.dataset.tab; if (v === 'stats') openStats(); else if (v === 'settings') openSettings(); else showScreen(v); };
+
+/* ---- the main menu's background: a few arrows quietly winding across the screen ---- */
+const bgfx = (() => {
+  const c = $('#bgfx'), x = c.getContext('2d'); let on = false, snakes = [], W = 0, H = 0, step = 26, last = 0;
+  function size() { const d = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; c.width = W * d; c.height = H * d; x.setTransform(d, 0, 0, d, 0, 0); }
+  function spawn() {
+    const cols = Math.ceil(W / step), rows = Math.ceil(H / step), d = (Math.random() * 4) | 0, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const p = d === 0 ? [-1, (Math.random() * rows) | 0] : d === 1 ? [cols, (Math.random() * rows) | 0] : d === 2 ? [(Math.random() * cols) | 0, -1] : [(Math.random() * cols) | 0, rows];
+    return { pts: [p], dir: dirs[d], len: 6 + ((Math.random() * 10) | 0), t: 0, speed: 0.04 + Math.random() * 0.04 };
+  }
+  function frame(now) {
+    if (!on) return;
+    if (!last) last = now; const dt = Math.min(50, now - last) / 16.7; last = now;
+    x.clearRect(0, 0, W, H);
+    const ink = isDark() ? 'rgba(238,241,246,' : 'rgba(24,33,58,';
+    while (snakes.length < Math.max(6, Math.round(W * H / 52000))) snakes.push(spawn());
+    for (const s of snakes) {
+      s.t += s.speed * dt;
+      while (s.t >= 1) {
+        s.t -= 1; const h = s.pts[s.pts.length - 1];
+        if (Math.random() < 0.22) { const turn = Math.random() < 0.5 ? [s.dir[1], -s.dir[0]] : [-s.dir[1], s.dir[0]]; s.dir = turn; }
+        s.pts.push([h[0] + s.dir[0], h[1] + s.dir[1]]); if (s.pts.length > s.len) s.pts.shift();
+      }
+      const P = s.pts.map(p => [p[0] * step + step / 2, p[1] * step + step / 2]), h = P[P.length - 1];
+      const hx = h[0] + s.dir[0] * step * s.t, hy = h[1] + s.dir[1] * step * s.t;
+      x.strokeStyle = ink + '.10)'; x.fillStyle = ink + '.13)'; x.lineWidth = 2.2; x.lineCap = 'round'; x.lineJoin = 'round';
+      x.beginPath(); x.moveTo(P[0][0], P[0][1]); for (const p of P) x.lineTo(p[0], p[1]); x.lineTo(hx, hy); x.stroke();
+      const a = Math.atan2(s.dir[1], s.dir[0]); x.save(); x.translate(hx, hy); x.rotate(a); x.beginPath(); x.moveTo(9, 0); x.lineTo(-2, -6); x.lineTo(-2, 6); x.closePath(); x.fill(); x.restore();
+      const t0 = P[0]; s.dead = (t0[0] < -step * 3 || t0[1] < -step * 3 || t0[0] > W + step * 3 || t0[1] > H + step * 3) && (hx < -step || hy < -step || hx > W + step || hy > H + step);
+    }
+    snakes = snakes.filter(s => !s.dead);
+    requestAnimationFrame(frame);
+  }
+  addEventListener('resize', () => { if (on) size(); });
+  return { run(v) { if (v === on) return; on = v; if (on) { size(); last = 0; requestAnimationFrame(frame); } else x.clearRect(0, 0, W, H); } };
+})();
 
 /* ======================= game buttons ======================= */
-$('#backBtn').onclick = () => { if (G && G.P && !G.done) autosave(); if (G && G.autoNext) clearTimeout(G.autoNext); G = null; showScreen('home'); };
+$('#backBtn').onclick = () => { const to = (G && G.from) || 'home'; if (G && G.P && !G.done) autosave(); if (G && G.autoNext) clearTimeout(G.autoNext); G = null; showScreen(to); };
 $('#pauseBtn').onclick = pause;
 $('#undoBtn').onclick = undo;
 $('#hintBtn').onclick = hint;
@@ -1221,7 +1590,7 @@ window.addEventListener('keydown', e => {
 /* test hook (used by the automated browser tests; harmless otherwise) */
 window.__unwind = { get G() { return G; }, V, project, pick, attempt, hint, undo, draw, E };
 
-applyTheme(); resize(); renderHome();
+applyTheme(); resize(); showScreen('home');
 })();
 
 </script>
