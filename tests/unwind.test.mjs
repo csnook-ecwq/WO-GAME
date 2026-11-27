@@ -123,3 +123,16 @@ test('any free arrow is always a safe move (hints can never strand the board)', 
     assert.ok(E.solve(P.arrows, removed).ok);
   }
 });
+
+test('later levels are harder: bigger boards and more arrows as the level number rises', () => {
+  for (const [type, shape, diff] of [['2d', 'square', 'hard'], ['3d', 'cube', 'medium']]) {
+    const at = n => E.makePuzzle({ type, diff, shape, seed: 77, ramp: Math.min(1, (n - 1) / 30) });
+    const a = at(1), b = at(31);
+    const size = P => P.surf.kind === 'flat' ? P.surf.W : P.surf.dims[0];
+    assert.ok(size(b) > size(a), `${type}: board grows (${size(a)} → ${size(b)})`);
+    assert.ok(b.arrows.length > a.arrows.length * 1.2, `${type}: more arrows (${a.arrows.length} → ${b.arrows.length})`);
+    checkPuzzle(b);
+  }
+  // past Impossible it keeps growing rather than stopping
+  assert.ok(E.tuned(E.P2, 'impossible', 1).W > E.P2.impossible.W);
+});

@@ -1,0 +1,12 @@
+{
+  "appId": "com.unwindgame.app",
+  "appName": "UNWIND",
+  "webDir": "www",
+  "backgroundColor": "#f4f2ec",
+  "ios": { "contentInset": "never", "scrollEnabled": false },
+  "android": { "allowMixedContent": false },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 600, "launchAutoHide": true, "backgroundColor": "#f4f2ec", "showSpinner": false },
+    "StatusBar": { "overlaysWebView": true }
+  }
+}

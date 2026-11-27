@@ -26,6 +26,7 @@ function isDark() { return settings.theme === 'dark' || (settings.theme === 'aut
 function applyTheme() {
   document.documentElement.dataset.theme = isDark() ? 'dark' : 'light';
   const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = isDark() ? '#10131a' : '#f4f2ec';
+  const SB = plugin('StatusBar'); if (SB) try { SB.setStyle({ style: isDark() ? 'DARK' : 'LIGHT' }); } catch (e) {}
   requestDraw();
   if (typeof curScreen !== 'undefined' && curScreen !== 'game') { if (curScreen === 'home') renderHome(); else if (curScreen === 'pack') renderPack(); else if (curScreen === 'daily') renderDaily(); }
 }
@@ -59,7 +60,22 @@ const sfx = {
   win: () => { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.25, 'sine', 0.06), i * 90)); },
   hint: () => tone(880, 0.12, 'sine', 0.04, 1180),
 };
-function buzz(p) { if (settings.haptics && navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} }
+// Inside the iPhone/Android app (Capacitor) use the phone's real haptic engine; in a browser, the vibration API.
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const plugin = n => (NATIVE && window.Capacitor.Plugins && window.Capacitor.Plugins[n]) || null;
+function buzz(p) {
+  if (!settings.haptics) return;
+  const H = plugin('Haptics');
+  if (H) {
+    try {
+      if (typeof p === 'number') H.impact({ style: p > 12 ? 'MEDIUM' : 'LIGHT' });
+      else if (p.length <= 3) H.notification({ type: 'WARNING' });
+      else H.notification({ type: 'SUCCESS' });
+    } catch (e) {}
+    return;
+  }
+  if (navigator.vibrate) try { navigator.vibrate(p); } catch (e) {}
+}
 
 /* ======================= puzzle catalogue: packs, levels, dailies ======================= */
 const PACKS = [
@@ -90,7 +106,9 @@ const DAILIES = [
 ];
 function levelSpec(packId, diff, n) {
   const pk = PACK[packId];
-  return { pack: pk.id, type: pk.type, diff, shape: pk.shapes[(n - 1) % pk.shapes.length], seed: E.hashStr(`level|${pk.id}|${diff}|${n}`), n };
+  // every level a little harder than the last: by level 31 it is most of the way to the next difficulty
+  const ramp = Math.min(1, (n - 1) / 30);
+  return { pack: pk.id, type: pk.type, diff, shape: pk.shapes[(n - 1) % pk.shapes.length], seed: E.hashStr(`level|${pk.id}|${diff}|${n}`), n, ramp };
 }
 const dateKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 function today() { return dateKey(new Date()); }
@@ -716,7 +734,7 @@ function openSettings() {
     <div class="set"><span>Animation speed</span>${seg('speed', [[0.6, 'Slow'], [1, 'Normal'], [1.8, 'Fast']])}</div>
     <div class="set"><span>Show grid</span>${sw('grid')}</div>
     <div class="set"><span>Sound effects</span>${sw('sound')}</div>
-    <div class="set"><span>Vibration<br><span class="small">Where the browser supports it (not iPhone Safari)</span></span>${sw('haptics')}</div>
+    <div class="set"><span>Vibration${NATIVE ? '' : '<br><span class="small">In the app, or browsers that support it (not iPhone Safari)</span>'}</span>${sw('haptics')}</div>
     <div class="set"><span>Challenge countdown<br><span class="small">Off: Challenge just times you</span></span>${sw('countdown')}</div>
     <div class="set"><span>How to play</span><button class="chipb" data-act="tutorial">Play the tutorial</button></div>
     <div class="set"><span>Reset progress</span><button class="chip" data-act="reset">Reset…</button></div>
@@ -949,6 +967,15 @@ window.addEventListener('keydown', e => {
   if (!G || !G.P) return;
   if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo(); }
   else if (e.key === 'h') hint(); else if (e.key === 'Escape') (veilOpen() ? closeSheet() : pause());
+});
+
+/* Android's back button (in the app): step back through the menus instead of quitting */
+const AppP = plugin('App');
+if (AppP) AppP.addListener('backButton', () => {
+  if (veilOpen()) { if (G && G.done) act('menu'); else closeSheet(); }
+  else if (curScreen === 'game') $('#backBtn').click();
+  else if (curScreen === 'pack' || curScreen === 'daily') showScreen('home');
+  else AppP.exitApp();
 });
 
 /* test hook (used by the automated browser tests; harmless otherwise) */

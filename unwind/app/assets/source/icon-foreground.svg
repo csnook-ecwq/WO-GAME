@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Android adaptive icon foreground: kept inside the central safe zone -->
+  <g transform="translate(512 512) scale(.64) translate(-512 -512)"><path d="M300 250V560a212 212 0 0 0 424 0V330c0-70 -96-70 -96 0v190" fill="none" stroke="#ffffff" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/><circle cx="752" cy="800" r="58" fill="#ffe14d"/></g>
+</svg>

@@ -1,0 +1,25 @@
+{
+  "name": "unwind-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UNWIND as native iPhone and Android apps (Capacitor wrapper around ../index.html).",
+  "scripts": {
+    "web": "node ../build.mjs && node scripts/copy-web.mjs",
+    "assets": "capacitor-assets generate --iconBackgroundColor '#1a2a78' --iconBackgroundColorDark '#1a2a78' --splashBackgroundColor '#f4f2ec' --splashBackgroundColorDark '#10131a'",
+    "sync": "npm run web && cap sync",
+    "android:debug": "npm run sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/splash-screen": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0"
+  }
+}

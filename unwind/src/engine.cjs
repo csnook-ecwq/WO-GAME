@@ -293,16 +293,29 @@ function freeArrows(arrows, removed, occ) {
   return arrows.filter(a => !removed[a.i] && a.ray.every(r => occ[r] < 0 || occ[r] === a.i)).map(a => a.i);
 }
 
+// Settings for a puzzle: its difficulty, pushed towards the next difficulty by spec.ramp (0..1).
+// Levels use the ramp so that every level is a little harder than the one before.
+function tuned(table, diff, ramp) {
+  const a = table[diff], i = DIFFS.indexOf(diff), r = Math.max(0, Math.min(1, ramp || 0));
+  if (!r || i < 0) return a;
+  // past Impossible there is no next table: keep growing by the same step as the last one
+  const b = i + 1 < DIFFS.length ? table[DIFFS[i + 1]] : Object.fromEntries(Object.entries(a).map(([k, v]) => [k, typeof v === 'number' ? v + (v - table[DIFFS[i - 1]][k]) : v]));
+  const out = Object.assign({}, a), mix = (x, y) => x + (y - x) * r * 0.85;
+  for (const k of ['W', 'N', 'maxLen', 'aim']) if (k in a) out[k] = mix(a[k], b[k]);
+  if ('W' in out) out.W = Math.round(out.W); if ('N' in out) out.N = Math.round(out.N); out.maxLen = Math.round(out.maxLen);
+  out.turn = mix(a.turn, b.turn);
+  return out;
+}
 function surfaceFor(spec) {
   let surf, opt;
   if (spec.W && spec.H) return { surf: flatSurface(spec.W, spec.H), opt: P2.easy }; // hand-made boards (the tutorial)
   if (spec.type === '3d') {
-    opt = P3[spec.diff]; const N = opt.N;
+    opt = tuned(P3, spec.diff, spec.ramp); const N = opt.N;
     const r = f => Math.max(2, Math.round(N * f));
     const dims = { cube: [N, N, N], slab: [r(1.25), r(0.45), r(1.15)], tower: [r(0.6), r(1.6), r(0.6)], bar: [r(1.7), r(0.55), r(0.55)], brick: [r(1.25), r(0.85), r(0.7)] }[spec.shape] || [N, N, N];
     surf = boxSurface(dims[0], dims[1], dims[2]);
   } else {
-    opt = P2[spec.diff]; const shape = SHAPES[spec.shape] ? spec.shape : 'square';
+    opt = tuned(P2, spec.diff, spec.ramp); const shape = SHAPES[spec.shape] ? spec.shape : 'square';
     let W, H;
     if (shape === 'rectangle') { W = Math.round(opt.W * 0.85); H = Math.round(opt.W * 1.2); }
     else if (shape === 'maze') { W = opt.W; H = Math.round(opt.W * 1.3); }
@@ -338,6 +351,6 @@ function assemble(spec, paths) {
 }
 function makePuzzle(spec) { return assemble(spec, pathsFor(spec)); }
 
-const api = { AX, OPP, inPlane, rng, hashStr, Surface, flatSurface, boxSurface, shapeMask, SHAPES, SHAPE_NAMES, SHAPES_2D, SOLIDS, DIFFS, DIFF_NAMES, P2, P3, fill, finish, blockers, solve, freeArrows, surfaceFor, pathsFor, assemble, makePuzzle };
+const api = { AX, OPP, inPlane, rng, hashStr, Surface, flatSurface, boxSurface, shapeMask, SHAPES, SHAPE_NAMES, SHAPES_2D, SOLIDS, DIFFS, DIFF_NAMES, P2, P3, fill, finish, blockers, solve, freeArrows, tuned, surfaceFor, pathsFor, assemble, makePuzzle };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else window.UnwindEngine = api;
