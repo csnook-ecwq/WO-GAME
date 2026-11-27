@@ -234,6 +234,13 @@ svg{display:block}
 table.recs{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
 table.recs td{padding:7px 2px;border-bottom:1px solid var(--line);font-weight:700}
 table.recs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+/* tutorial coach bubble */
+.coach{position:absolute;left:12px;right:12px;top:10px;z-index:3;display:none;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:var(--panel);box-shadow:0 4px 0 var(--line),var(--shadow);animation:rise .4s both}
+.coach.on{display:flex}
+.coach div{flex:1;min-width:0}
+.coach b{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--pack);font-weight:900}
+.coach p{margin:2px 0 0;font-weight:800;font-size:15px}
+.coach button{flex:0 0 auto;padding:8px 12px;border-radius:12px;background:var(--soft);font-weight:800;font-size:13px;color:var(--muted)}
 #confetti{position:fixed;inset:0;pointer-events:none;z-index:11}
 </style>
 </head>
@@ -331,6 +338,7 @@ table.recs td:last-child{text-align:right;font-variant-numeric:tabular-nums}
   <div id="stage">
     <canvas id="cv"></canvas>
     <div class="toast" id="toast"></div>
+    <div class="coach" id="coach"><div><b></b><p></p></div><button id="coachSkip">Skip</button></div>
     <div class="loading" id="loading"><div class="spin"></div><div id="loadingText">Untangling…</div></div>
   </div>
   <div class="tools">

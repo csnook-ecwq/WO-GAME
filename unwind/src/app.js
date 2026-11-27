@@ -135,6 +135,7 @@ function getWorker() {
 }
 const cache = new Map();
 function generate(spec) {
+  if (spec.paths) return Promise.resolve(E.assemble(spec, spec.paths)); // hand-made board
   const key = JSON.stringify([spec.type, spec.diff, spec.shape, spec.seed]);
   if (cache.has(key)) return Promise.resolve(E.assemble(spec, cache.get(key)));
   return new Promise((resolve, reject) => {
@@ -145,6 +146,48 @@ function generate(spec) {
     w.postMessage({ id, spec });
   });
 }
+
+/* ======================= first-time tutorial ======================= */
+// A hand-made 5x5 board (cell = y*5+x) that teaches one idea per step.
+const T5 = (x, y) => y * 5 + x;
+const TUTORIAL = {
+  pack: 'classic', type: '2d', diff: 'easy', shape: 'square', seed: 1, W: 5, H: 5, tutorial: true,
+  paths: [
+    [T5(2, 2), T5(2, 1), T5(1, 1), T5(1, 0)], // 0: winds up and out of the top: free
+    [T5(0, 3), T5(1, 3)],                     // 1: points right, but arrow 2 is in its way
+    [T5(3, 4), T5(3, 3), T5(3, 2)],           // 2: points up: free, and it blocks arrow 1
+    [T5(0, 0), T5(0, 1), T5(0, 2)],           // 3: points down into arrow 1
+    [T5(1, 4), T5(2, 4)],                     // 4: points right into arrow 2
+    [T5(4, 2), T5(4, 1), T5(4, 0)],           // 5: points up: free
+  ],
+};
+const TUT_STEPS = [
+  { target: 0, text: 'Tap the glowing arrow. It slides out the way it points.' },
+  { target: 1, text: 'This one is stuck. Tap it to see what is in its way.', blocked: true },
+  { target: 2, text: 'That arrow is blocking it. Clear it first.' },
+  { target: 1, text: 'Its path is clear now. Tap it again.' },
+  { target: null, text: 'Now clear the rest. Check where each arrow points first!' },
+];
+function coach(step) {
+  G.tutStep = step; const S = TUT_STEPS[step], el = $('#coach');
+  el.querySelector('p').textContent = S.text; el.querySelector('b').textContent = `Step ${step + 1} of ${TUT_STEPS.length}`; el.classList.add('on');
+  G.coach = S.target; if (S.target !== null) { G.hint = S.target; G.hintT = performance.now(); } else G.hint = null;
+  requestDraw();
+}
+function tutorialTap(i, wasFree) { // returns false to ignore the tap
+  const S = TUT_STEPS[G.tutStep];
+  if (S.target !== null && i !== S.target) { toast('Tap the glowing arrow'); return false; }
+  setTimeout(() => {
+    if (!G || G.kind !== 'tutorial') return;
+    if (S.blocked ? !wasFree : wasFree) { if (G.tutStep + 1 < TUT_STEPS.length) coach(G.tutStep + 1); }
+  }, S.blocked ? 650 : 250);
+  return true;
+}
+function finishTutorial(toMenu) {
+  LS.set('tutorialDone', true); $('#coach').classList.remove('on');
+  if (toMenu) { veil.classList.remove('on'); G = null; showScreen('home'); }
+}
+function startTutorial(from) { newGame(TUTORIAL, 'tutorial', 'relax', null, from || 'home'); }
 
 /* ======================= game state ======================= */
 let G = null; // current game
@@ -204,6 +247,7 @@ function newGame(spec, kind, mode, restore, from) {
       Object.assign(G, { moves: restore.moves || 0, mistakes: restore.mistakes || 0, hints: restore.hints || 0, undos: restore.undos || 0, elapsed: restore.elapsed || 0, hearts: restore.hearts ?? 3 });
     }
     fitView(); setLoading(false); updateHud(); requestDraw(); lastTick = performance.now();
+    if (G.kind === 'tutorial') coach(0); else $('#coach').classList.remove('on');
     if (!restore) autosave();
     if (G.mode !== 'challenge' && !restore && G.kind !== 'endless' && P.arrows.length > 120) toast('Pinch to zoom · drag to ' + (spec.type === '3d' ? 'turn' : 'move'));
   }).catch(err => { console.error(err); setLoading(true, 'Could not build this puzzle: ' + err.message); });
@@ -216,6 +260,7 @@ const remaining = () => { let n = 0; for (const v of G.removed) if (!v) n++; ret
 function attempt(i) {
   if (!G || !G.P || G.done || G.paused || G.removed[i]) return;
   if (G.anims.has(i)) return;
+  if (G.kind === 'tutorial' && !tutorialTap(i, isFree(i))) return;
   G.hint = G.hint === i ? null : G.hint;
   if (isFree(i)) {
     removeLogical(i); G.moves++;
@@ -261,6 +306,13 @@ const STAR = (on, cls) => `<svg class="${cls || ''}" viewBox="0 0 24 24"><path d
 function earnedStars() { return G.mistakes === 0 && G.hints === 0 ? 3 : G.mistakes <= 2 && G.hints <= 1 ? 2 : 1; }
 function win() {
   const s = G.spec, pk = packOf(s); sfx.win(); buzz([10, 40, 10, 40, 30]);
+  if (G.kind === 'tutorial') {
+    $('#coach').classList.remove('on'); confetti(pk.color); LS.del('game');
+    sheet(`<h2 class="pop">You're ready!</h2><div class="stars">${[0, 1, 2].map(() => `<span class="s">${STAR(true)}</span>`).join('')}</div>
+      <p>Tap arrows whose way out is clear. Blocked taps cost a heart in Classic mode, and hints always show a safe move.</p>
+      <button class="big packc" data-act="tutdone">Let's play</button>`);
+    return;
+  }
   stats.solved++; stats.byKey[pk.id + '-' + s.diff] = (stats.byKey[pk.id + '-' + s.diff] || 0) + 1;
   if (!G.mistakes && !G.hints) stats.perfect++;
   const stars = earnedStars(), id = puzzleId(), before = starsFor(id);
@@ -329,7 +381,7 @@ function confetti(color) {
 
 /* ======================= autosave ======================= */
 function autosave() {
-  if (!G || !G.P || G.done) return;
+  if (!G || !G.P || G.done || G.kind === 'tutorial') return;
   LS.set('game', { spec: G.spec, kind: G.kind, mode: G.mode, history: G.history, moves: G.moves, mistakes: G.mistakes, hints: G.hints, undos: G.undos, elapsed: G.elapsed, hearts: G.hearts, endlessN: G.endlessN, startDiff: G.startDiff, left: remaining(), total: G.P.arrows.length, at: Date.now() });
 }
 
@@ -349,11 +401,12 @@ function ortho(R) { // keep the rotation a rotation
   return [a[0], b[0], c[0], a[1], b[1], c[1], a[2], b[2], c[2]];
 }
 const is3D = () => G && G.P && G.P.surf.kind === 'box';
+const topRoom = () => (G && G.kind === 'tutorial' ? 104 : 0); // space kept clear for the tutorial's coach bubble
 function fitView() {
   if (!G || !G.P) return; const s = G.P.surf;
   if (!is3D()) {
-    const pad = 14; V.fitK = Math.min((VW - pad * 2) / s.W, (VH - pad * 2) / s.H); V.k = V.fitK;
-    V.ox = (VW - s.W * V.k) / 2; V.oy = (VH - s.H * V.k) / 2;
+    const pad = 14, top = topRoom(); V.fitK = Math.min((VW - pad * 2) / s.W, (VH - top - pad * 2) / s.H); V.k = V.fitK;
+    V.ox = (VW - s.W * V.k) / 2; V.oy = top + (VH - top - s.H * V.k) / 2;
   } else {
     const [X, Y, Z] = s.dims, diag = Math.hypot(X, Y, Z); V.camD = diag * 3.2;
     V.fitK = Math.min(VW, VH) * 0.86 / diag; V.zoom = 1; V.px = 0; V.py = 0;
@@ -368,7 +421,7 @@ function clampView() {
     const bw = s.W * V.k, bh = s.H * V.k, m = 60;
     // a board that fits stays centred; a bigger (zoomed) one can be dragged a little past its edges
     V.ox = bw <= VW ? (VW - bw) / 2 : Math.min(m, Math.max(VW - bw - m, V.ox));
-    V.oy = bh <= VH ? (VH - bh) / 2 : Math.min(m, Math.max(VH - bh - m, V.oy));
+    const top = topRoom(); V.oy = bh <= VH - top ? top + (VH - top - bh) / 2 : Math.min(m + top, Math.max(VH - bh - m, V.oy));
   } else {
     V.zoom = Math.max(0.5, Math.min(4, V.zoom)); const lim = Math.max(VW, VH) * 0.6 * V.zoom;
     V.px = Math.max(-lim, Math.min(lim, V.px)); V.py = Math.max(-lim, Math.min(lim, V.py));
@@ -477,7 +530,7 @@ function draw(now) {
   for (const [i, a] of G.anims) { if (now - a.t0 >= a.dur) G.anims.delete(i); else special.add(i); }
   for (const [i, t] of G.flash) { if (now - t > 520) G.flash.delete(i); else special.add(i); }
   if (G.blockLine && now - G.blockLine.t > 900) G.blockLine = null;
-  if (G.hint !== null && (G.removed[G.hint] || now - G.hintT > 4000)) G.hint = null;
+  if (G.hint !== null && G.hint !== G.coach && (G.removed[G.hint] || now - G.hintT > 4000)) G.hint = null;
   if (G.hint !== null) special.add(G.hint);
   G.hit = []; // projected segments for tapping
   // faces seen at a glancing angle get thinner, fainter arrows so they don't smear together
@@ -610,8 +663,8 @@ function bringIntoView(i) {
 const HEART = c => `<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.4C.9 8 3.1 4 7 4c2.2 0 3.6 1.2 5 3 1.4-1.8 2.8-3 5-3 3.9 0 6.1 4 4.6 7.6C19.5 16.4 12 21 12 21z" fill="${c}"/></svg>`;
 function updateHud() {
   if (!G) return; const s = G.spec, pk = packOf(s);
-  $('#gTitle').textContent = G.kind === 'level' ? `${pk.name} · Level ${s.n}` : G.kind === 'daily' ? (DAILIES.find(d => d.kind === s.daily) || DAILIES[0]).name : `Endless #${G.endlessN || 1}`;
-  $('#gSub').textContent = `${E.DIFF_NAMES[s.diff]} · ${shapeName(s)} · ${MODES[G.mode] ? MODES[G.mode].name : ''}`;
+  $('#gTitle').textContent = G.kind === 'tutorial' ? 'How to play' : G.kind === 'level' ? `${pk.name} · Level ${s.n}` : G.kind === 'daily' ? (DAILIES.find(d => d.kind === s.daily) || DAILIES[0]).name : `Endless #${G.endlessN || 1}`;
+  $('#gSub').textContent = G.kind === 'tutorial' ? 'Learn the basics in a minute' : `${E.DIFF_NAMES[s.diff]} · ${shapeName(s)} · ${MODES[G.mode] ? MODES[G.mode].name : ''}`;
   if (!G.P) { $('#status').innerHTML = ''; $('#progBar').style.width = '0'; return; }
   const n = G.P.arrows.length, left = remaining(), bits = [`<span class="chipi">${left} / ${n} arrows</span>`];
   if (G.mode === 'classic') bits.unshift(`<span class="hearts">${[0, 1, 2].map(k => HEART(k < G.hearts ? 'var(--bad)' : 'var(--line)')).join('')}</span>`);
@@ -640,6 +693,8 @@ function act(a, el) {
   if (a === 'restart') { veil.classList.remove('on'); restart(); return; }
   if (a === 'next') { veil.classList.remove('on'); nextPuzzle(); return; }
   if (a === 'settings') return openSettings();
+  if (a === 'tutdone') return finishTutorial(true);
+  if (a === 'tutorial') { veil.classList.remove('on'); return startTutorial(curScreen === 'game' ? 'home' : curScreen); }
   if (a === 'set') { const k = el.dataset.k; let v = el.dataset.v; if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(+v)) v = +v; settings[k] = v; saveSettings(); applyTheme(); requestDraw(); return openSettings(); }
   if (a === 'toggle') { const k = el.dataset.k; settings[k] = !settings[k]; saveSettings(); if (k === 'sound' && settings.sound) sfx.hint(); requestDraw(); return openSettings(); }
   if (a === 'reset') { return sheet(`<h2>Reset everything?</h2><p>Clears your levels, records, statistics and the saved game. Settings stay.</p><div class="row"><button class="big ghost" data-act="settings">Cancel</button><button class="big" style="background:var(--bad)" data-act="reset2">Reset</button></div>`); }
@@ -663,6 +718,7 @@ function openSettings() {
     <div class="set"><span>Sound effects</span>${sw('sound')}</div>
     <div class="set"><span>Vibration<br><span class="small">Where the browser supports it (not iPhone Safari)</span></span>${sw('haptics')}</div>
     <div class="set"><span>Challenge countdown<br><span class="small">Off: Challenge just times you</span></span>${sw('countdown')}</div>
+    <div class="set"><span>How to play</span><button class="chipb" data-act="tutorial">Play the tutorial</button></div>
     <div class="set"><span>Reset progress</span><button class="chip" data-act="reset">Reset…</button></div>
     <button class="big" data-act="${G && G.P && !G.done ? 'resume' : 'close'}">Done</button>
     <p class="small" style="margin-top:12px">Everything is saved on this device only. No accounts, no ads.</p>`);
@@ -879,7 +935,8 @@ const bgfx = (() => {
 })();
 
 /* ======================= game buttons ======================= */
-$('#backBtn').onclick = () => { const to = (G && G.from) || 'home'; if (G && G.P && !G.done) autosave(); if (G && G.autoNext) clearTimeout(G.autoNext); G = null; showScreen(to); };
+$('#coachSkip').onclick = () => finishTutorial(true);
+$('#backBtn').onclick = () => { if (G && G.kind === 'tutorial') return finishTutorial(true); const to = (G && G.from) || 'home'; if (G && G.P && !G.done) autosave(); if (G && G.autoNext) clearTimeout(G.autoNext); G = null; showScreen(to); };
 $('#pauseBtn').onclick = pause;
 $('#undoBtn').onclick = undo;
 $('#hintBtn').onclick = hint;
@@ -898,4 +955,6 @@ window.addEventListener('keydown', e => {
 window.__unwind = { get G() { return G; }, V, project, pick, attempt, hint, undo, draw, E };
 
 applyTheme(); resize(); showScreen('home');
+// first launch: teach the game before anything else
+if (!LS.get('tutorialDone', false) && !stats.solved && !LS.get('game', null)) startTutorial('home');
 })();

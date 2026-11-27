@@ -295,6 +295,7 @@ function freeArrows(arrows, removed, occ) {
 
 function surfaceFor(spec) {
   let surf, opt;
+  if (spec.W && spec.H) return { surf: flatSurface(spec.W, spec.H), opt: P2.easy }; // hand-made boards (the tutorial)
   if (spec.type === '3d') {
     opt = P3[spec.diff]; const N = opt.N;
     const r = f => Math.max(2, Math.round(N * f));
